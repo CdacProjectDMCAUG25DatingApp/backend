@@ -50,7 +50,7 @@ router.post("/addPhotos", upload.fields([{ name: "img1" }, { name: "img2" }, { n
     })
 })
 
-router.get('/fetchPhotos', (req, res) => {
+router.get('/userphotos', (req, res) => {
     const uid = req.headers.uid
     console.log(uid)
     const sql = `select * from userphotos where uid = ?`    
