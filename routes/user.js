@@ -12,7 +12,6 @@ router.post('/signin', (req, res) => {
     const { email, password } = req.body
     const sql = `SELECT * FROM users WHERE email = ?`
     pool.query(sql, [email], (err, data) => {
-        console.log(data)
         if (err)
             res.send(result.createResult(err))
         else if (data.length == 0)
@@ -70,7 +69,6 @@ router.post('/userprofile', (req, res) => {
 router.get('/userprofile', (req, res) => {
     const uid = req.headers.uid
     const sql = `select * from userprofile where uid = ?`
-    console.log(req.body)
     pool.query(sql, [uid], (err, data) => {
         res.send(result.createResult(err, data))
     })
@@ -90,7 +88,6 @@ router.post('/userpreferences', (req, res) => {
 router.get('/userpreferences', (req, res) => {
     const uid = req.headers.uid
     const sql = `select * from userpreferences where uid = ?`
-    console.log(req.body)
     pool.query(sql, [uid], (err, data) => {
         res.send(result.createResult(err, data))
     })

@@ -44,7 +44,6 @@ router.post("/addPhotos", upload.fields([{ name: "img1" }, { name: "img2" }, { n
 
     const sql = `INSERT INTO userphotos(uid,photo_url) VALUES(?,?),(?,?),(?,?),(?,?),(?,?),(?,?)`
     pool.query(sql, [uid, img1Name, uid, img2Name, uid, img3Name, uid, img4Name, uid, img5Name, uid, img6Name], (err, data) => {
-        console.log("Before Sending " + data)
         res.send(result.createResult(err, data))
 
     })
@@ -52,7 +51,6 @@ router.post("/addPhotos", upload.fields([{ name: "img1" }, { name: "img2" }, { n
 
 router.get('/userphotos', (req, res) => {
     const uid = req.headers.uid
-    console.log(uid)
     const sql = `select * from userphotos where uid = ?`    
     pool.query(sql,[uid], (err, data) => {
         console.log(err)
