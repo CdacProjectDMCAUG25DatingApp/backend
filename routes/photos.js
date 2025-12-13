@@ -5,7 +5,7 @@ const result = require('../utils/result')
 const config = require('../utils/config')
 const multer = require('multer')
 
-const upload = multer({ dest: 'photos/' })
+const upload = multer({ dest: 'profilePhotos/' })
 
 const router = express.Router()
 
@@ -51,9 +51,9 @@ router.post("/addPhotos", upload.fields([{ name: "img1" }, { name: "img2" }, { n
 
 router.get('/userphotos', (req, res) => {
     const uid = req.headers.uid
-    const sql = `select * from userphotos where uid = ?`    
+    const sql = `select * from userphotos where uid = ? and is_approved = 1`    
     pool.query(sql,[uid], (err, data) => {
-        console.log(err)
+        console.log(data)
         res.send(result.createResult(err, data))
     })
 })

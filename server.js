@@ -12,6 +12,7 @@ const app = express()
 
 // Middlewares
 app.use(cors()) // to allow the requests from different origin
+app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json())
 app.use(authorizeUser) // this is our middleware used for user authorization
 app.use('/user', userRouter)
