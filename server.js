@@ -7,6 +7,7 @@ const authorizeUser = require('./utils/authuser')
 const userRouter = require("./routes/user")
 const photoRouter = require("./routes/photos")
 const lookUpRouter = require('./routes/LookUpTables/getlookups')
+const showpeopleRouter = require("./routes/Interactions/showpeople") 
 
 const app = express()
 
@@ -18,6 +19,7 @@ app.use(authorizeUser) // this is our middleware used for user authorization
 app.use('/user', userRouter)
 app.use("/photos",photoRouter)
 app.use('/api',lookUpRouter)
+app.use('/interactions',showpeopleRouter)
 
 app.listen(4000, 'localhost', () => {
     console.log('Server started at port 4000')

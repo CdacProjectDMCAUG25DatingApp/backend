@@ -53,7 +53,6 @@ router.get('/userphotos', (req, res) => {
     const uid = req.headers.uid
     const sql = `select * from userphotos where uid = ? and is_approved = 1`    
     pool.query(sql,[uid], (err, data) => {
-        console.log(data)
         res.send(result.createResult(err, data))
     })
 })
