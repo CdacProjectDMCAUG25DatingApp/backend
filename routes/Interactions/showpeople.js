@@ -11,10 +11,12 @@ const router = express.Router()
 
 router.get("/getcandidates", async (req, res) => {
   const uid = Number(req.headers.uid)
-
-  const profileSql = `
-SELECT
+  const responseSql = `
+  SELECT
   u.uid,
+  u.user_name,
+
+  -- profile
   up.gender,
   up.religion,
   up.mother_tongue,
@@ -23,9 +25,29 @@ SELECT
   up.bio,
   up.dob,
   up.height,
-  up.weight
+  up.weight,
+
+  -- preferences
+  pref.preferred_gender_id,
+  pref.looking_for_id,
+  pref.open_to_id,
+  pref.zodiac_id,
+  pref.family_plan_id,
+  pref.communication_style_id,
+  pref.love_style_id,
+  pref.drinking_id,
+  pref.workout_id,
+  pref.dietary_id,
+  pref.sleeping_habit_id,
+  pref.personality_type_id,
+  pref.pet_id
+
 FROM users u
-LEFT JOIN userprofile up ON up.uid = u.uid
+LEFT JOIN userprofile up 
+  ON up.uid = u.uid AND up.is_deleted = 0
+LEFT JOIN userpreferences pref 
+  ON pref.uid = u.uid AND pref.is_deleted = 0
+
 WHERE u.uid IN (?)
 `
   const photosSql = `
@@ -177,40 +199,42 @@ WHERE active = 1 AND uid IN (?)
     if (!self) {
       return res.send(result.createResult(null, []))
     }
-    const calculatedCandidates = finalCandidates
-      .map(candidate => ({
+    const calculatedCandidates = finalCandidates  // final candidates are possible people that can be seen in the application
+      .map(candidate => ({  //candidate is the each finalCandidate 
         uid: candidate.uid,
         score: calculateScore(self, candidate)     //calculated score of each candidate
       }))
       .sort((a, b) => b.score - a.score)        // sorted based on that score descendingly 
 
-    const sortedIds = calculatedCandidates.map(c => c.uid)
-    const [profiles] = await pool.promise().query(profileSql, [sortedIds])
+
+    //sorted Ids are id taken out of calculatedCandidates( {uid: value , score : value} )  
+    const sortedIds = calculatedCandidates.map(c => c.uid)  //calculatedCandidates( {uid: value , score : value} )  are uid and calculated score to final candidates
+    const [responseSqlResult] = await pool.promise().query(responseSql, [sortedIds])
     const [photos] = await pool.promise().query(photosSql, [sortedIds])
     const photoMap = {}
     photos.forEach(p => {
       photoMap[p.uid] ??= []
-      photoMap[p.uid].push({photo_url : p.photo_url ,prompt : p.prompt})
-    
+      photoMap[p.uid].push({ photo_url: p.photo_url, prompt: p.prompt })
     })
-    const response = calculatedCandidates.map(c => {
-      const profile = profiles.find(p => p.uid === c.uid)
-      const { uid, ...safeProfile } = profile
-      console.log(uid)
+    const response = calculatedCandidates.map(c => {     //map return array of candidate in response format
+      const profileOfEachCandidate = responseSqlResult.find(p => p.uid === c.uid) || {} // taking profile from profile table that matches uid from calculatedProfile
+      const { uid, ...safeProfileOfEachCandidate } = profileOfEachCandidate
+
       return {
         token: signCandidateToken(c.uid),
-        score: c.score,             
-        profile: safeProfile || {},
+        score: c.score,
+        candidateData: safeProfileOfEachCandidate || [],
         photos: photoMap[c.uid] || []
       }
     })
+
     res.send(result.createResult(null, response))
   } catch (err) {
     res.send(result.createResult(err))
   }
 })
 
-const signCandidateToken = (uid) => {
+const signCandidateToken = (uid) => {     //uid in recommended candidate must not be passed as it is so converting it into token
   return jwt.sign(
     { uid },
     config.SECRET,
@@ -218,7 +242,7 @@ const signCandidateToken = (uid) => {
   )
 }
 
-function calculateScore(self, candidate) {
+function calculateScore(self, candidate) {   //Calculating the score according to which candidates are to be recommended
   let score = 0
 
   const WEIGHTS = {
@@ -297,7 +321,7 @@ function calculateScore(self, candidate) {
   return score
 }
 
-const getSelf = async (uid) => {
+const getSelf = async (uid) => {            // Creating Object of Our Profile and Fields
   const [[self]] = await pool.promise().query(`
   SELECT
     up.gender,
