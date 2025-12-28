@@ -2,6 +2,8 @@ const express = require('express')
 
 const pool = require('../../utils/db')
 const result = require('../../utils/result')
+const config = require('../../utils/config')
+const jwt = require('jsonwebtoken')
 
 const router = express.Router()
 
@@ -9,6 +11,31 @@ const router = express.Router()
 
 router.get("/getcandidates", async (req, res) => {
   const uid = Number(req.headers.uid)
+
+  const profileSql = `
+SELECT
+  u.uid,
+  up.gender,
+  up.religion,
+  up.mother_tongue,
+  up.education,
+  up.job_industry_id,
+  up.bio,
+  up.dob,
+  up.height,
+  up.weight
+FROM users u
+LEFT JOIN userprofile up ON up.uid = u.uid
+WHERE u.uid IN (?)
+`
+  const photosSql = `
+SELECT uid, photo_url , prompt
+FROM userphotos
+WHERE uid IN (?)
+ORDER BY is_primary DESC
+`
+
+
   const candidateSql = `SELECT
   u.uid,
   up.gender,
@@ -152,16 +179,45 @@ WHERE active = 1 AND uid IN (?)
     }
     const calculatedCandidates = finalCandidates
       .map(candidate => ({
-        ...candidate,
+        uid: candidate.uid,
         score: calculateScore(self, candidate)     //calculated score of each candidate
       }))
-      .sort((a, b) => b.score - a.score)           // sorted based on that score descendingly 
+      .sort((a, b) => b.score - a.score)        // sorted based on that score descendingly 
 
-    res.send(result.createResult(null, calculatedCandidates))
+    const sortedIds = calculatedCandidates.map(c => c.uid)
+    const [profiles] = await pool.promise().query(profileSql, [sortedIds])
+    const [photos] = await pool.promise().query(photosSql, [sortedIds])
+    const photoMap = {}
+    photos.forEach(p => {
+      photoMap[p.uid] ??= []
+      photoMap[p.uid].push({photo_url : p.photo_url ,prompt : p.prompt})
+    
+    })
+    const response = calculatedCandidates.map(c => {
+      const profile = profiles.find(p => p.uid === c.uid)
+      const { uid, ...safeProfile } = profile
+      console.log(uid)
+      return {
+        token: signCandidateToken(c.uid),
+        score: c.score,             
+        profile: safeProfile || {},
+        photos: photoMap[c.uid] || []
+      }
+    })
+    res.send(result.createResult(null, response))
   } catch (err) {
     res.send(result.createResult(err))
   }
 })
+
+const signCandidateToken = (uid) => {
+  return jwt.sign(
+    { uid },
+    config.SECRET,
+    { expiresIn: '24h' }   // candidates tokens should be short-lived
+  )
+}
+
 function calculateScore(self, candidate) {
   let score = 0
 
