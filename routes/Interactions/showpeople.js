@@ -216,10 +216,9 @@ WHERE active = 1 AND uid IN (?)
       photoMap[p.uid] ??= []
       photoMap[p.uid].push({ photo_url: p.photo_url, prompt: p.prompt })
     })
-    const response = calculatedCandidates.map(c => {     //map return array of candidate in response format
+    const response = calculatedCandidates.map(c => {     //Create the response as array of candidates(objects{token(string),score(int),candidateData{},photos[]})
       const profileOfEachCandidate = responseSqlResult.find(p => p.uid === c.uid) || {} // taking profile from profile table that matches uid from calculatedProfile
       const { uid, ...safeProfileOfEachCandidate } = profileOfEachCandidate
-
       return {
         token: signCandidateToken(c.uid),
         score: c.score,
@@ -227,7 +226,6 @@ WHERE active = 1 AND uid IN (?)
         photos: photoMap[c.uid] || []
       }
     })
-
     res.send(result.createResult(null, response))
   } catch (err) {
     res.send(result.createResult(err))

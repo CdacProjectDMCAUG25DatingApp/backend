@@ -58,10 +58,10 @@ router.post('/signup', (req, res) => {
 })
 
 router.post('/userprofile', (req, res) => {
-    const { gender, bio, religion, location, motherTongue, marital, dob, education, jobTitle, jobIndustry } = req.body
+    const { gender, bio, religion, location, motherTongue, marital, dob, education, tagline, jobIndustry } = req.body
     const uid = req.headers.uid
-    const sql = `INSERT INTO userprofile(uid,bio,gender,location,religion,mother_tongue,marital_status,dob,education,job_title,job_industry_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    pool.query(sql, [uid, bio, gender, location, religion, motherTongue, marital, dob, education, jobTitle, jobIndustry], (err, data) => {
+    const sql = `INSERT INTO userprofile(uid,bio,gender,location,religion,mother_tongue,marital_status,dob,education,tagline,job_industry_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    pool.query(sql, [uid, bio, gender, location, religion, motherTongue, marital, dob, education, tagline, jobIndustry], (err, data) => {
         res.send(result.createResult(err, data))
     })
 })
