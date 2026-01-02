@@ -77,9 +77,9 @@ router.get('/userprofile', (req, res) => {
 router.post('/userpreferences', (req, res) => {
     const uid = req.headers.uid
     const { lookingFor, openTo, zodiac, familyPlan, education, communicationStyle, lovestyle, drinking, smoking, workout
-        , dietary, sleepingHabit, Religion, personalityType, pet } = req.body
-    const sql = `insert into userpreferences(uid, looking_for_id, open_to_id, zodiac_id, family_plan_id, education_id, communication_style_id, love_style_id, drinking_id, smoking_id, workout_id, dietary_id, sleeping_habit_id, religion_id, personality_type_id, pet_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    pool.query(sql, [uid, lookingFor, openTo, zodiac, familyPlan, education, communicationStyle, lovestyle, drinking, smoking, workout
+        , dietary, sleepingHabit, Religion, personalityType, pet, gender } = req.body
+    const sql = `insert into userpreferences(uid, looking_for_id,preferred_gender_id, open_to_id, zodiac_id, family_plan_id, education_id, communication_style_id, love_style_id, drinking_id, smoking_id, workout_id, dietary_id, sleeping_habit_id, religion_id, personality_type_id, pet_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    pool.query(sql, [uid, lookingFor, gender, openTo, zodiac, familyPlan, education, communicationStyle, lovestyle, drinking, smoking, workout
         , dietary, sleepingHabit, Religion, personalityType, pet], (err, data) => {
             res.send(result.createResult(err, data))
         })

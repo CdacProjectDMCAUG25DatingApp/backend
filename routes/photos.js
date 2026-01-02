@@ -9,8 +9,12 @@ const upload = multer({ dest: 'profilePhotos/' })
 
 const router = express.Router()
 
-router.post("/addPhotos", upload.fields([{ name: "img1" }, { name: "img2" }, { name: "img3" }, { name: "img4" }, { name: "img5" }, { name: "img6" }]), (req, res) => {
+router.post("/addPhotos", upload.fields([{ name: "img0" }, { name: "img1" }, { name: "img2" }, { name: "img3" }, { name: "img4" }, { name: "img5" }]), (req, res) => {
     const uid = req.headers.uid
+    const img0Name = req.files.img0[0].filename + ".jpg"
+    const oldPathImg0 = req.files.img0[0].path;
+    const newPathImg0 = oldPathImg0 + ".jpg"
+    fs.renameSync(oldPathImg0, newPathImg0)
 
     const img1Name = req.files.img1[0].filename + ".jpg"
     const oldPathImg1 = req.files.img1[0].path;
@@ -37,22 +41,17 @@ router.post("/addPhotos", upload.fields([{ name: "img1" }, { name: "img2" }, { n
     const newPathImg5 = oldPathImg5 + ".jpg"
     fs.renameSync(oldPathImg5, newPathImg5)
 
-    const img6Name = req.files.img6[0].filename + ".jpg"
-    const oldPathImg6 = req.files.img6[0].path;
-    const newPathImg6 = oldPathImg6 + ".jpg"
-    fs.renameSync(oldPathImg6, newPathImg6)
 
     const sql = `INSERT INTO userphotos(uid,photo_url) VALUES(?,?),(?,?),(?,?),(?,?),(?,?),(?,?)`
-    pool.query(sql, [uid, img1Name, uid, img2Name, uid, img3Name, uid, img4Name, uid, img5Name, uid, img6Name], (err, data) => {
+    pool.query(sql, [uid, img0Name, uid, img1Name, uid, img2Name, uid, img3Name, uid, img4Name, uid, img5Name], (err, data) => {
         res.send(result.createResult(err, data))
-
     })
 })
 
 router.get('/userphotos', (req, res) => {
     const uid = req.headers.uid
-    const sql = `select * from userphotos where uid = ? and is_approved = 1`    
-    pool.query(sql,[uid], (err, data) => {
+    const sql = `select * from userphotos where uid = ? and is_approved = 1`
+    pool.query(sql, [uid], (err, data) => {
         res.send(result.createResult(err, data))
     })
 })
