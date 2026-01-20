@@ -159,4 +159,70 @@ router.get('/userpreferences', (req, res) => {
     })
 })
 
+router.patch('/userdetails', (req, res) => {
+    const uid = req.headers.uid;
+    const payload = req.body;
+    console.log(payload)
+
+    if (!uid) {
+        return res.send(result.createResult("UID missing", null));
+    }
+
+    if (!payload || Object.keys(payload).length === 0) {
+        return res.send(result.createResult("No fields to update", null));
+    }
+
+    const fieldMap = {
+        looking_for: "looking_for_id",
+        preferred_gender: "preferred_gender_id",
+        open_to: "open_to_id",
+        zodiac: "zodiac_id",
+        family_plan: "family_plan_id",
+        education: "education_id",
+        communication_style: "communication_style_id",
+        love_style: "love_style_id",
+        drinking: "drinking_id",
+        smoking: "smoking_id",
+        workout: "workout_id",
+        dietary: "dietary_id",
+        sleeping_habit: "sleeping_habit_id",
+        religion: "religion_id",
+        personality_type: "personality_type_id",
+        pet: "pet_id"
+    };
+
+    const setClauses = [];
+    const values = [];
+
+    // build SET clause dynamically
+    Object.keys(payload).forEach(key => {
+        if (fieldMap[key]) {
+            setClauses.push(`${fieldMap[key]} = ?`);
+            values.push(payload[key]);
+        }
+    });
+
+    if (setClauses.length === 0) {
+        return res.send(result.createResult("Invalid fields", null));
+    }
+
+    const sql = `
+        UPDATE userpreferences
+        SET ${setClauses.join(", ")}
+        WHERE uid = ? AND is_deleted = 0
+    `;
+
+    values.push(uid);
+
+    pool.query(sql, values, (err, data) => {
+        if(data){
+            console.log(data)
+            res.send(result.createResult(err, data));
+        }else{
+        }
+    });
+});
+
+
+
 module.exports = router

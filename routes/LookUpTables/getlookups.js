@@ -101,7 +101,7 @@ router.get("/drinking", (req, res) => {
 
 router.get("/smoking", (req, res) => {
     pool.query(
-        "SELECT smoking_id, name FROM smoking WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM smoking WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -109,14 +109,14 @@ router.get("/smoking", (req, res) => {
 
 router.get("/workout", (req, res) => {
     pool.query(
-        "SELECT workout_id, name FROM workout WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM workout WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/dietary", (req, res) => {
     pool.query(
-        "SELECT dietary_id, name FROM dietary WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM dietary WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -124,28 +124,28 @@ router.get("/dietary", (req, res) => {
 
 router.get("/sleepingHabit", (req, res) => {
     pool.query(
-        "SELECT sleeping_habit_id, name FROM sleepingHabit WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM sleepingHabit WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/religion", (req, res) => {
     pool.query(
-        "SELECT religion_id, name FROM religion WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM religion WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/personalitytype", (req, res) => {
     pool.query(
-        "SELECT personality_type_id, name FROM personalitytype WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM personalitytype WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/pet", (req, res) => {
     pool.query(
-        "SELECT pet_id, name FROM pet WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM pet WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
