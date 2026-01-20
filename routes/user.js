@@ -114,6 +114,7 @@ SELECT
   cs.name AS communication_style,
   ls.name AS love_style,
   dr.name AS drinking,
+  sm.name AS smoking,
   wo.name AS workout,
   di.name AS dietary,
   sh.name AS sleeping_habit,
@@ -138,6 +139,7 @@ LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
 LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
 LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
 LEFT JOIN drinking dr ON pref.drinking_id = dr.id
+LEFT JOIN smoking sm ON pref.smoking_id = sm.id
 LEFT JOIN workout wo ON pref.workout_id = wo.id
 LEFT JOIN dietary di ON pref.dietary_id = di.id
 LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
@@ -162,8 +164,6 @@ router.get('/userpreferences', (req, res) => {
 router.patch('/userdetails', (req, res) => {
     const uid = req.headers.uid;
     const payload = req.body;
-    console.log(payload)
-
     if (!uid) {
         return res.send(result.createResult("UID missing", null));
     }
@@ -216,11 +216,79 @@ router.patch('/userdetails', (req, res) => {
 
     pool.query(sql, values, (err, data) => {
         if(data){
-            console.log(data)
             res.send(result.createResult(err, data));
         }else{
         }
     });
+});
+
+router.patch('/photo/prompt', (req, res) => {
+    const uid = req.headers.uid;
+    const { photo_id, prompt } = req.body;
+    if (!uid || !photo_id) {
+        return res.send(result.createResult("Missing uid or photo_id", null));
+    }
+
+    const sql = `
+        UPDATE userphotos
+        SET prompt = ?
+        WHERE photo_id = ? AND uid = ? AND is_deleted = 0
+    `;
+
+    pool.query(sql, [prompt, photo_id, uid], (err, data) => {
+        res.send(result.createResult(err, data));
+    });
+});
+
+// routes/user.js
+router.patch("/profile", (req, res) => {
+  const uid = req.headers.uid;
+  const payload = req.body;
+
+  if (!uid || !Object.keys(payload).length) {
+    return res.send(result.createResult("Invalid request", null));
+  }
+
+  const allowedFields = [
+    "bio",
+    "height",
+    "weight",
+    "gender",
+    "tagline",
+    "dob",
+    "marital_status",
+    "location",
+    "mother_tongue",
+    "religion",
+    "education",
+    "job_industry_id"
+  ];
+
+  const setClauses = [];
+  const values = [];
+
+  Object.keys(payload).forEach((key) => {
+    if (allowedFields.includes(key)) {
+      setClauses.push(`${key} = ?`);
+      values.push(payload[key]);
+    }
+  });
+
+  if (!setClauses.length) {
+    return res.send(result.createResult("No valid fields", null));
+  }
+
+  const sql = `
+    UPDATE userprofile
+    SET ${setClauses.join(", ")}
+    WHERE uid = ? AND is_deleted = 0
+  `;
+
+  values.push(uid);
+
+  pool.query(sql, values, (err, data) => {
+    res.send(result.createResult(err, data));
+  });
 });
 
 
