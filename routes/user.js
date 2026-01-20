@@ -85,6 +85,72 @@ router.post('/userpreferences', (req, res) => {
         })
 })
 
+router.get('/userdetails', (req, res) => {
+    const uid = req.headers.uid
+    const sql = `
+SELECT
+  u.uid,
+  u.user_name,
+
+  -- profile
+  g.name AS gender,
+  r.name AS religion,
+  lang.name AS mother_tongue,
+  edu.name AS education,
+  ji.name AS job_industry,
+  up.bio,
+  up.dob,
+  up.height,
+  up.weight,
+  up.tagline,
+  up.location,
+
+  -- preferences
+  pg.name AS preferred_gender,
+  lf.name AS looking_for,
+  ot.name AS open_to,
+  z.name AS zodiac,
+  fp.name AS family_plan,
+  cs.name AS communication_style,
+  ls.name AS love_style,
+  dr.name AS drinking,
+  wo.name AS workout,
+  di.name AS dietary,
+  sh.name AS sleeping_habit,
+  pt.name AS personality_type,
+  p.name AS pet
+
+FROM users u
+LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
+LEFT JOIN userpreferences pref ON pref.uid = u.uid AND pref.is_deleted = 0
+
+LEFT JOIN gender g ON up.gender = g.id
+LEFT JOIN religion r ON up.religion = r.id
+LEFT JOIN language lang ON up.mother_tongue = lang.id
+LEFT JOIN education edu ON up.education = edu.id
+LEFT JOIN jobindustry ji ON up.job_industry_id = ji.id
+
+LEFT JOIN gender pg ON pref.preferred_gender_id = pg.id
+LEFT JOIN lookingfor lf ON pref.looking_for_id = lf.id
+LEFT JOIN opento ot ON pref.open_to_id = ot.id
+LEFT JOIN zodiac z ON pref.zodiac_id = z.id
+LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
+LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
+LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
+LEFT JOIN drinking dr ON pref.drinking_id = dr.id
+LEFT JOIN workout wo ON pref.workout_id = wo.id
+LEFT JOIN dietary di ON pref.dietary_id = di.id
+LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
+LEFT JOIN personalitytype pt ON pref.personality_type_id = pt.id
+LEFT JOIN pet p ON pref.pet_id = p.id
+
+WHERE u.uid IN (?);
+`;
+    pool.query(sql, [uid], (err, data) => {
+        res.send(result.createResult(err, data))
+    })
+})
+
 router.get('/userpreferences', (req, res) => {
     const uid = req.headers.uid
     const sql = `select * from userpreferences where uid = ?`

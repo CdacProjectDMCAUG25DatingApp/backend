@@ -50,7 +50,7 @@ router.post("/addPhotos", upload.fields([{ name: "img0" }, { name: "img1" }, { n
 
 router.get('/userphotos', (req, res) => {
     const uid = req.headers.uid
-    const sql = `select * from userphotos where uid = ? and is_approved = 1`
+    const sql = `select photo_id,photo_url,prompt from userphotos where uid = ? and is_approved = 1`
     pool.query(sql, [uid], (err, data) => {
         res.send(result.createResult(err, data))
     })

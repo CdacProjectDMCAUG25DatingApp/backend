@@ -12,44 +12,65 @@ const router = express.Router()
 router.get("/getcandidates", async (req, res) => {
   const uid = Number(req.headers.uid)
   const responseSql = `
-  SELECT
+SELECT
   u.uid,
   u.user_name,
 
   -- profile
-  up.gender,
-  up.religion,
-  up.mother_tongue,
-  up.education,
-  up.job_industry_id,
+  g.name AS gender,
+  r.name AS religion,
+  lang.name AS mother_tongue,
+  edu.name AS education,
+  ji.name AS job_industry,
   up.bio,
   up.dob,
   up.height,
   up.weight,
+  up.tagline,
+  up.location,
 
   -- preferences
-  pref.preferred_gender_id,
-  pref.looking_for_id,
-  pref.open_to_id,
-  pref.zodiac_id,
-  pref.family_plan_id,
-  pref.communication_style_id,
-  pref.love_style_id,
-  pref.drinking_id,
-  pref.workout_id,
-  pref.dietary_id,
-  pref.sleeping_habit_id,
-  pref.personality_type_id,
-  pref.pet_id
+  pg.name AS preferred_gender,
+  lf.name AS looking_for,
+  ot.name AS open_to,
+  z.name AS zodiac,
+  fp.name AS family_plan,
+  cs.name AS communication_style,
+  ls.name AS love_style,
+  dr.name AS drinking,
+  wo.name AS workout,
+  di.name AS dietary,
+  sh.name AS sleeping_habit,
+  pt.name AS personality_type,
+  p.name AS pet
 
 FROM users u
-LEFT JOIN userprofile up 
-  ON up.uid = u.uid AND up.is_deleted = 0
-LEFT JOIN userpreferences pref 
-  ON pref.uid = u.uid AND pref.is_deleted = 0
+LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
+LEFT JOIN userpreferences pref ON pref.uid = u.uid AND pref.is_deleted = 0
 
-WHERE u.uid IN (?)
-`
+LEFT JOIN gender g ON up.gender = g.id
+LEFT JOIN religion r ON up.religion = r.id
+LEFT JOIN language lang ON up.mother_tongue = lang.id
+LEFT JOIN education edu ON up.education = edu.id
+LEFT JOIN jobindustry ji ON up.job_industry_id = ji.id
+
+LEFT JOIN gender pg ON pref.preferred_gender_id = pg.id
+LEFT JOIN lookingfor lf ON pref.looking_for_id = lf.id
+LEFT JOIN opento ot ON pref.open_to_id = ot.id
+LEFT JOIN zodiac z ON pref.zodiac_id = z.id
+LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
+LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
+LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
+LEFT JOIN drinking dr ON pref.drinking_id = dr.id
+LEFT JOIN workout wo ON pref.workout_id = wo.id
+LEFT JOIN dietary di ON pref.dietary_id = di.id
+LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
+LEFT JOIN personalitytype pt ON pref.personality_type_id = pt.id
+LEFT JOIN pet p ON pref.pet_id = p.id
+
+WHERE u.uid IN (?);
+`;
+
   const photosSql = `
 SELECT uid, photo_url , prompt
 FROM userphotos
@@ -200,10 +221,14 @@ WHERE active = 1 AND uid IN (?)
       return res.send(result.createResult(null, []))
     }
     const calculatedCandidates = finalCandidates  // final candidates are possible people that can be seen in the application
-      .map(candidate => ({  //candidate is the each finalCandidate 
-        uid: candidate.uid,
-        score: calculateScore(self, candidate)     //calculated score of each candidate
-      }))
+      .map(candidate => {  //candidate is the each finalCandidate 
+        const scoreANDmatch_interests_count = calculateScore(self, candidate)
+        return {
+          uid: candidate.uid,
+          score: scoreANDmatch_interests_count.score,  //calculated score of each candidate
+          match_interests_count: scoreANDmatch_interests_count.match_interests_count
+        }
+      })
       .sort((a, b) => b.score - a.score)        // sorted based on that score descendingly 
 
 
@@ -217,14 +242,17 @@ WHERE active = 1 AND uid IN (?)
       photoMap[p.uid].push({ photo_url: p.photo_url, prompt: p.prompt })
     })
     const response = calculatedCandidates.map(c => {     //Create the response as array of candidates(objects{token(string),score(int),candidateData{},photos[]})
+ 
       const profileOfEachCandidate = responseSqlResult.find(p => p.uid === c.uid) || {} // taking profile from profile table that matches uid from calculatedProfile
       const { uid, ...safeProfileOfEachCandidate } = profileOfEachCandidate
       return {
         token: signCandidateToken(c.uid),
         score: c.score,
-        candidateData: safeProfileOfEachCandidate || [],
+        match_interests_count: c.match_interests_count,
+        candidateData: safeProfileOfEachCandidate,
         photos: photoMap[c.uid] || []
       }
+
     })
     res.send(result.createResult(null, response))
   } catch (err) {
@@ -242,26 +270,27 @@ const signCandidateToken = (uid) => {     //uid in recommended candidate must no
 
 function calculateScore(self, candidate) {   //Calculating the score according to which candidates are to be recommended
   let score = 0
+  let match_interests_count = 0
 
   const WEIGHTS = {
-    looking_for_id: 6,
-    open_to_id: 4,
-    zodiac_id: 4,
-    education: 4,
-    family_plan_id: 2,
-    communication_style_id: 5,
-    love_style_id: 5,
-    drinking_id: 4,
-    workout_id: 4,
-    dietary_id: 4,
-    sleeping_habit_id: 2,
-    religion: 10,
-    personality_type_id: 4,
-    pet_id: 2,
-    mother_tongue: 4,
-    job_industry_id: 6,
-    interests: 4,
-    languages: 3
+    looking_for_id: 8,
+    open_to_id: 5,
+    zodiac_id: 5,
+    education: 5,
+    family_plan_id: 3,
+    communication_style_id: 7,
+    love_style_id: 7,
+    drinking_id: 5,
+    workout_id: 5,
+    dietary_id: 5,
+    sleeping_habit_id: 3,
+    religion: 14,
+    personality_type_id: 5,
+    pet_id: 3,
+    mother_tongue: 5,
+    job_industry_id: 8,
+    interests: 5,
+    languages: 4
   }
 
   const directFields = [
@@ -291,6 +320,7 @@ function calculateScore(self, candidate) {   //Calculating the score according t
       candidate[field] !== undefined &&
       self[field] === candidate[field]
     ) {
+      match_interests_count += 1
       score += WEIGHTS[field] || 0
     }
   }
@@ -303,6 +333,7 @@ function calculateScore(self, candidate) {   //Calculating the score according t
     const commonInterests = self.interests.filter(i =>
       candidate.interests.includes(i)
     )
+    match_interests_count += 1
     score += commonInterests.length * WEIGHTS.interests
   }
 
@@ -316,7 +347,8 @@ function calculateScore(self, candidate) {   //Calculating the score according t
 
     score += commonLanguages.length * WEIGHTS.languages
   }
-  return score
+  const scoreANDmatch_interests = { score, match_interests_count }
+  return scoreANDmatch_interests
 }
 
 const getSelf = async (uid) => {            // Creating Object of Our Profile and Fields
@@ -359,5 +391,7 @@ const getSelf = async (uid) => {            // Creating Object of Our Profile an
   self.languages = selfLanguages?.map(l => l.language_id)
   return self
 }
+
+
 
 module.exports = router

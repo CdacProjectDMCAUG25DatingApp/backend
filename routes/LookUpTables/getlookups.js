@@ -9,35 +9,35 @@ const router = express.Router()
 router.get("/gender", (req, res) => {
     
     pool.query(
-        "SELECT gender_id, name FROM gender WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM gender WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/religion", (req, res) => {
     pool.query(
-        "SELECT religion_id, name FROM religion WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM religion WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/mother-tongue", (req, res) => {
     pool.query(
-        "SELECT language_id, name FROM language WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM language WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/education", (req, res) => {
     pool.query(
-        "SELECT education_id, name FROM education WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM education WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
 });
 router.get("/job-Industry", (req, res) => {
     pool.query(
-        "SELECT industry_id, name FROM JobIndustry WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM JobIndustry WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -45,7 +45,7 @@ router.get("/job-Industry", (req, res) => {
 
 router.get("/lookingfor", (req, res) => {
     pool.query(
-        "SELECT looking_for_id, name FROM lookingfor WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM lookingfor WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -53,7 +53,7 @@ router.get("/lookingfor", (req, res) => {
 
 router.get("/opento", (req, res) => {
     pool.query(
-        "SELECT open_to_id, name FROM opento WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM opento WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -61,7 +61,7 @@ router.get("/opento", (req, res) => {
 
 router.get("/zodiac", (req, res) => {
     pool.query(
-        "SELECT zodiac_id, name FROM zodiac WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM zodiac WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -69,7 +69,7 @@ router.get("/zodiac", (req, res) => {
 
 router.get("/familyplan", (req, res) => {
     pool.query(
-        "SELECT family_plan_id, name FROM familyplans WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM familyplans WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -77,7 +77,7 @@ router.get("/familyplan", (req, res) => {
 
 router.get("/communicationstyle", (req, res) => {
     pool.query(
-        "SELECT communication_style_id, name FROM communicationstyle WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM communicationstyle WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -85,7 +85,7 @@ router.get("/communicationstyle", (req, res) => {
 
 router.get("/lovestyle", (req, res) => {
     pool.query(
-        "SELECT love_style_id, name FROM lovestyle WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM lovestyle WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -93,7 +93,7 @@ router.get("/lovestyle", (req, res) => {
 
 router.get("/drinking", (req, res) => {
     pool.query(
-        "SELECT drinking_id, name FROM drinking WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM drinking WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
