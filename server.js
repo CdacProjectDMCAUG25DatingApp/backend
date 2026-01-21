@@ -9,6 +9,7 @@ const photoRouter = require("./routes/photos")
 const lookUpRouter = require('./routes/LookUpTables/getlookups')
 const showpeopleRouter = require("./routes/Interactions/showpeople") 
 const likeesandmatches = require("./routes/Interactions/likesnmatches") 
+const settingsRoutes = require("./routes/settingsroutes")
 
 const app = express()
 
@@ -17,11 +18,12 @@ app.use(cors()) // to allow the requests from different origin
 app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json())
 app.use(authorizeUser) // this is our middleware used for user authorization
-app.use('/user', userRouter)
+app.use('/user', userRouter) //these are ordered based on how they were created
 app.use("/photos",photoRouter)
 app.use('/api',lookUpRouter)
 app.use('/interactions',showpeopleRouter)
 app.use('/likeesandmatches',likeesandmatches)
+app.use("/settings", settingsRoutes);
 
 app.listen(4000, 'localhost', () => {
     console.log('Server started at port 4000')
