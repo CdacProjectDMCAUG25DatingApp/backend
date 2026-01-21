@@ -38,6 +38,7 @@ SELECT
   cs.name AS communication_style,
   ls.name AS love_style,
   dr.name AS drinking,
+  sm.name AS smoking,
   wo.name AS workout,
   di.name AS dietary,
   sh.name AS sleeping_habit,
@@ -62,6 +63,7 @@ LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
 LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
 LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
 LEFT JOIN drinking dr ON pref.drinking_id = dr.id
+LEFT JOIN smoking sm ON pref.smoking_id = sm.id
 LEFT JOIN workout wo ON pref.workout_id = wo.id
 LEFT JOIN dietary di ON pref.dietary_id = di.id
 LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
