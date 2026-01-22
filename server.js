@@ -13,6 +13,8 @@ const showpeopleRouter = require("./routes/Interactions/showpeople");
 const likeesandmatches = require("./routes/Interactions/likesnmatches");
 const settingsRoutes = require("./routes/settingsroutes");
 const chatRoutes = require("./routes/chat");
+const swipeRouter = require("./routes/swipes");
+
 
 // Initialize express + HTTP server
 const app = express();
@@ -43,6 +45,7 @@ app.use('/interactions', showpeopleRouter);
 app.use('/likeesandmatches', likeesandmatches);
 app.use("/settings", settingsRoutes);
 app.use("/chat", chatRoutes);
+app.use("/swipe", swipeRouter);
 
 server.listen(4000, 'localhost', () => {
     console.log("Server running on port 4000");

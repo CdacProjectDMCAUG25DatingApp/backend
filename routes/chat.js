@@ -14,20 +14,31 @@ router.get("/chat/list", (req, res) => {
     const uid = req.headers.uid;
 
     const sql = `
-   SELECT 
+SELECT 
   u.uid,
   up.dob,
   u.user_name,
+
+  -- return ONLY is_primary = 1 photo
   p.photo_url,
+
   lm.message AS last_message,
   lm.timestamp AS last_time
 FROM matches m
 JOIN users u
   ON (u.uid = m.user_a OR u.uid = m.user_b)
-LEFT JOIN userphotos p 
-  ON p.uid = u.uid AND p.is_primary = 1
+
+-- primary photo join
+LEFT JOIN (
+    SELECT uid, photo_url 
+    FROM userphotos
+    WHERE is_primary = 1
+) AS p 
+ON p.uid = u.uid
+
 LEFT JOIN userprofile up 
  ON up.uid = u.uid
+
 LEFT JOIN (
     SELECT 
         t.otherId,
@@ -48,11 +59,12 @@ LEFT JOIN (
     WHERE t.rn = 1
 ) AS lm
 ON lm.otherId = u.uid
+
 WHERE u.uid != ?
 AND (m.user_a = ? OR m.user_b = ?);
 `;
 
-    pool.query(sql, [uid, uid, uid, uid, uid, uid , uid], (err, rows) => {
+    pool.query(sql, [uid, uid, uid, uid, uid, uid, uid], (err, rows) => {
         if (err) return res.send(result.createResult(err));
 
         const finalList = rows.map((r) => ({
@@ -60,9 +72,11 @@ AND (m.user_a = ? OR m.user_b = ?);
             token: signCandidateToken(r.uid),
             uid: undefined,
         }));
+
         res.send(result.createResult(null, finalList));
     });
 });
+
 
 router.post("/history", (req, res) => {
     const myUid = req.headers.uid;
