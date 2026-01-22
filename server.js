@@ -1,30 +1,49 @@
 // builtin modules
-const express = require('express')
-const cors = require('cors')
+const express = require('express');
+const cors = require('cors');
+const http = require('http');
+const { Server } = require("socket.io");
 
-//userdefined modules
-const authorizeUser = require('./utils/authuser')
-const userRouter = require("./routes/user")
-const photoRouter = require("./routes/photos")
-const lookUpRouter = require('./routes/LookUpTables/getlookups')
-const showpeopleRouter = require("./routes/Interactions/showpeople") 
-const likeesandmatches = require("./routes/Interactions/likesnmatches") 
-const settingsRoutes = require("./routes/settingsroutes")
+// userdefined modules
+const authorizeUser = require('./utils/authuser');
+const userRouter = require("./routes/user");
+const photoRouter = require("./routes/photos");
+const lookUpRouter = require('./routes/LookUpTables/getlookups');
+const showpeopleRouter = require("./routes/Interactions/showpeople");
+const likeesandmatches = require("./routes/Interactions/likesnmatches");
+const settingsRoutes = require("./routes/settingsroutes");
+const chatRoutes = require("./routes/chat");
 
-const app = express()
+// Initialize express + HTTP server
+const app = express();
+const server = http.createServer(app);
+
+// Setup Socket.io
+const io = new Server(server, {
+    cors: { origin: "*" }
+});
+
+// Initialize socket handlers
+const setupSocket = require("./socket");
+setupSocket(io);
 
 // Middlewares
-app.use(cors()) // to allow the requests from different origin
+app.use(cors());
 app.use('/profilePhotos', express.static('profilePhotos'))
-app.use(express.json())
-app.use(authorizeUser) // this is our middleware used for user authorization
-app.use('/user', userRouter) //these are ordered based on how they were created
-app.use("/photos",photoRouter)
-app.use('/api',lookUpRouter)
-app.use('/interactions',showpeopleRouter)
-app.use('/likeesandmatches',likeesandmatches)
-app.use("/settings", settingsRoutes);
+app.use(express.json());
 
-app.listen(4000, 'localhost', () => {
-    console.log('Server started at port 4000')
-})
+// Auth middleware ONLY for API routes (NOT for socket.io)
+app.use(authorizeUser);
+
+// Routers
+app.use('/user', userRouter);
+app.use("/photos", photoRouter);
+app.use('/api', lookUpRouter);
+app.use('/interactions', showpeopleRouter);
+app.use('/likeesandmatches', likeesandmatches);
+app.use("/settings", settingsRoutes);
+app.use("/chat", chatRoutes);
+
+server.listen(4000, 'localhost', () => {
+    console.log("Server running on port 4000");
+});

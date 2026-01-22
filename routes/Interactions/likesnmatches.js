@@ -176,79 +176,108 @@ router.get("/likes/matches", (req, res) => {
 
     const sql = `
         SELECT 
-            u.uid, u.user_name, u.email,
-            up.bio, up.height, up.weight, up.gender, up.tagline,
-            p.photo_url, p.prompt
+            u.uid,
+            u.user_name,
+            up.dob,
+            up.tagline,
+            g.name AS gender,
+            p.photo_url
         FROM matches m
         JOIN users u 
             ON (u.uid = m.user_a OR u.uid = m.user_b)
         LEFT JOIN userprofile up ON up.uid = u.uid
+        LEFT JOIN gender g ON g.id = up.gender
         LEFT JOIN userphotos p ON p.uid = u.uid AND p.is_primary = 1
         WHERE (m.user_a = ? OR m.user_b = ?)
           AND u.uid != ?
           AND u.is_deleted = 0
     `;
 
-    pool.query(sql, [uid, uid, uid], (err, data) => {
-        res.send(result.createResult(err, data));
+    pool.query(sql, [uid, uid, uid], (err, rows) => {
+        if (err) return res.send(result.createResult(err));
+
+        // Convert uid → token and hide uid (same as liked-you)
+        const updated = rows.map(row => ({
+            ...row,
+            token: signCandidateToken(row.uid),
+            uid: undefined
+        }));
+
+        res.send(result.createResult(null, updated));
     });
 });
+
 
 
 
 router.post("/likes/like", (req, res) => {
     const liker_uid = req.headers.uid;
-    const { liked_uid, is_super_like } = req.body;
+    const userToken = req.body.token;
+    const { is_super_like } = req.body;
 
-    const checkBothLikedSQL = `
-        SELECT * FROM likes
+    if (!liker_uid || !userToken)
+        return res.send(result.createResult("Invalid like data"));
+
+    let decoded;
+    try {
+        decoded = jwt.verify(userToken, config.SECRET);
+    } catch (err) {
+        return res.send(result.createResult("Invalid candidate token"));
+    }
+
+    const liked_uid = decoded.uid;
+
+    const userA = Math.min(liker_uid, liked_uid);
+    const userB = Math.max(liker_uid, liked_uid);
+
+    const checkReverse = `
+        SELECT 1 FROM likes
         WHERE liker_user_id = ? AND liked_user_id = ?
+        LIMIT 1
     `;
 
-    const createLikeSQL = `
-        INSERT INTO likes (liker_user_id, liked_user_id, is_super_like)
+    const insertLike = `
+        INSERT IGNORE INTO likes (liker_user_id, liked_user_id, is_super_like)
         VALUES (?, ?, ?)
     `;
 
-    const updateMatchSQL = `
-        UPDATE likes 
+    const markMatch = `
+        UPDATE likes
         SET is_match = 1
         WHERE (liker_user_id = ? AND liked_user_id = ?)
            OR (liker_user_id = ? AND liked_user_id = ?)
     `;
 
-    const insertMatchSQL = `
-        INSERT INTO matches (user_a, user_b)
+    const insertMatch = `
+        INSERT IGNORE INTO matches (user_a, user_b)
         VALUES (?, ?)
     `;
 
-    pool.query(checkBothLikedSQL, [liked_uid, liker_uid], (err, existingLike) => {
+    pool.query(checkReverse, [liked_uid, liker_uid], (err, rev) => {
         if (err) return res.send(result.createResult(err));
 
-        const bothLiked = existingLike.length > 0;
+        const matched = rev.length > 0;
 
-        pool.query(createLikeSQL, [liker_uid, liked_uid, is_super_like || 0], (err1) => {
-            if (err1) return res.send(result.createResult(err1));
+        pool.query(insertLike, [liker_uid, liked_uid, is_super_like || 0], (err2) => {
+            if (err2) return res.send(result.createResult(err2));
 
-            if (bothLiked) {
-                // Update likes table
-                pool.query(updateMatchSQL,
-                    [liker_uid, liked_uid, liked_uid, liker_uid], (err2) => {
+            if (!matched)
+                return res.send(result.createResult(null, { match: false, liked_uid }));
 
-                        if (err2) return res.send(result.createResult(err2));
+            pool.query(markMatch,
+                [liker_uid, liked_uid, liked_uid, liker_uid],
+                (err3) => {
 
-                        // Insert into matches table
-                        pool.query(insertMatchSQL,
-                            [liker_uid, liked_uid], (err3) => {
-                                res.send(result.createResult(err3, { match: true }));
-                            });
+                    if (err3) return res.send(result.createResult(err3));
+
+                    pool.query(insertMatch, [userA, userB], (err4) => {
+                        return res.send(result.createResult(err4, { match: true, liked_uid }));
                     });
-            } else {
-                res.send(result.createResult(null, { match: false }));
-            }
+                });
         });
     });
 });
+
 
 router.delete("/likes/ignore", (req, res) => {
     const uid = req.headers.uid;
@@ -284,6 +313,58 @@ router.get("/user/full-profile", (req, res) => {
         res.send(result.createResult(err, data));
     });
 });
+
+router.delete("/matches/remove", (req, res) => {
+    const mainToken = req.headers.token;     // logged in user token
+    const candidateToken = req.body.token;   // candidate token (body)
+
+    if (!mainToken) {
+        return res.send(result.createResult("Missing main token"));
+    }
+    if (!candidateToken) {
+        return res.send(result.createResult("Missing candidate token"));
+    }
+
+    let loggedUser;
+    let otherUser;
+
+    // Decode logged-in user
+    try {
+        loggedUser = jwt.verify(mainToken, config.SECRET).uid;
+    } catch (err) {
+        return res.send(result.createResult("Invalid main token"));
+    }
+
+    // Decode matched user's token
+    try {
+        otherUser = jwt.verify(candidateToken, config.SECRET).uid;
+    } catch (err) {
+        return res.send(result.createResult("Invalid candidate token"));
+    }
+
+    const cleanMatchSQL = `
+        DELETE FROM matches
+        WHERE (user_a = ? AND user_b = ?)
+           OR (user_b = ? AND user_a = ?)
+    `;
+
+    const cleanLikeSQL = `
+        UPDATE likes
+        SET is_match = 0
+        WHERE (liker_user_id = ? AND liked_user_id = ?)
+           OR (liker_user_id = ? AND liked_user_id = ?)
+    `;
+
+    pool.query(cleanMatchSQL, [loggedUser, otherUser, loggedUser, otherUser], (err1) => {
+        if (err1) return res.send(result.createResult(err1));
+
+        pool.query(cleanLikeSQL, [loggedUser, otherUser, otherUser, loggedUser], (err2) => {
+            return res.send(result.createResult(err2, { uid: otherUser }));
+        });
+    });
+});
+
+
 
 
 module.exports = router
