@@ -62,6 +62,7 @@ router.post('/userprofile', (req, res) => {
     const uid = req.headers.uid
     const sql = `INSERT INTO userprofile(uid,bio,gender,location,religion,mother_tongue,marital_status,dob,education,tagline,job_industry_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
     pool.query(sql, [uid, bio, gender, location, religion, motherTongue, marital, dob, education, tagline, jobIndustry], (err, data) => {
+        console.log(err)
         res.send(result.createResult(err, data))
     })
 })
@@ -164,7 +165,6 @@ router.get('/userpreferences', (req, res) => {
 router.patch('/userdetails', (req, res) => {
     const uid = req.headers.uid;
     const payload = req.body;
-    console.log(req.body)
     if (!uid) return res.send(result.createResult("UID missing"));
     if (!Object.keys(payload).length)
         return res.send(result.createResult("No fields to update"));
@@ -202,7 +202,6 @@ router.patch('/userdetails', (req, res) => {
 
 
     if (!setClauses.length) {
-        console.log(setClauses)
         return res.send(result.createResult("No valid fields"));
     }
 

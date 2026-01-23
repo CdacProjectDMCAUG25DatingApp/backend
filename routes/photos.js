@@ -1,71 +1,100 @@
-const express = require('express')
-const fs = require('fs')
-const pool = require('../utils/db')
-const result = require('../utils/result')
-const config = require('../utils/config')
-const multer = require('multer')
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const pool = require("../utils/db");
+const result = require("../utils/result");
+const multer = require("multer");
 
-const upload = multer({ dest: 'profilePhotos/' })
+const router = express.Router();
 
-const router = express.Router()
+/* ----------------------  MULTER STORAGE  ---------------------- */
+/* Always store with extension! */
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, "profilePhotos/");
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || ".jpg";
+        const unique = Date.now() + "-" + Math.round(Math.random() * 1e9) + ext;
+        cb(null, unique);
+    },
+});
+
+const upload = multer({ storage });
+
+/* ---------------------  UPLOAD ROUTE  -------------------------- */
 
 router.post(
     "/addPhotos",
     upload.fields([
-        { name: "img0" },
-        { name: "img1" },
-        { name: "img2" },
-        { name: "img3" },
-        { name: "img4" },
-        { name: "img5" }
+        { name: "img0", maxCount: 1 },
+        { name: "img1", maxCount: 1 },
+        { name: "img2", maxCount: 1 },
+        { name: "img3", maxCount: 1 },
+        { name: "img4", maxCount: 1 },
+        { name: "img5", maxCount: 1 },
     ]),
-    (req, res) => {
-        const uid = req.headers.uid;
+    async (req, res) => {
+        try {
+            const uid = req.headers.uid;
 
-        // Utility to rename file to .jpg
-        const renameFile = (file) => {
-            const newName = file.filename + ".jpg";
-            fs.renameSync(file.path, file.path + ".jpg");
-            return newName;
-        };
-
-        const img0Name = renameFile(req.files.img0[0]); // primary 1
-        const img1Name = renameFile(req.files.img1[0]); // primary 2
-        const img2Name = renameFile(req.files.img2[0]);
-        const img3Name = renameFile(req.files.img3[0]);
-        const img4Name = renameFile(req.files.img4[0]);
-        const img5Name = renameFile(req.files.img5[0]);
-
-        const sql = `
-      INSERT INTO userphotos(uid, photo_url, is_primary) 
-      VALUES
-        (?, ?, 1),  -- img0 primary
-        (?, ?, 2),  -- img1 secondary
-        (?, ?, 0),  -- img2
-        (?, ?, 0),  -- img3
-        (?, ?, 0),  -- img4
-        (?, ?, 0)   -- img5
-    `;
-
-        pool.query(
-            sql,
-            [
-                uid, img0Name,
-                uid, img1Name,
-                uid, img2Name,
-                uid, img3Name,
-                uid, img4Name,
-                uid, img5Name
-            ],
-            (err, data) => {
-                res.send(result.createResult(err, data));
+            if (!uid) {
+                return res.send(result.createResult("Missing UID"));
             }
-        );
+
+            if (!req.files || Object.keys(req.files).length < 6) {
+                return res.send(result.createResult("All 6 images are required"));
+            }
+
+            const getFile = (name) => req.files[name]?.[0]?.filename || null;
+
+            const img0 = getFile("img0");
+            const img1 = getFile("img1");
+            const img2 = getFile("img2");
+            const img3 = getFile("img3");
+            const img4 = getFile("img4");
+            const img5 = getFile("img5");
+
+            if (!img0 || !img1 || !img2 || !img3 || !img4 || !img5) {
+                return res.send(result.createResult("Missing one or more required images"));
+            }
+
+            const sql = `
+                INSERT INTO userphotos (uid, photo_url, is_primary)
+                VALUES
+                    (?, ?, 1),
+                    (?, ?, 2),
+                    (?, ?, 0),
+                    (?, ?, 0),
+                    (?, ?, 0),
+                    (?, ?, 0)
+            `;
+
+            pool.query(
+                sql,
+                [
+                    uid, img0,
+                    uid, img1,
+                    uid, img2,
+                    uid, img3,
+                    uid, img4,
+                    uid, img5
+                ],
+                (err, data) => {
+                    res.send(result.createResult(err, data));
+                }
+            );
+        } catch (err) {
+            console.error("Upload error:", err);
+            return res.send(result.createResult("Server Error"));
+        }
     }
 );
 
+/* ---------------------  GET USER PHOTOS  ------------------------ */
 
-router.get('/userphotos', (req, res) => {
+router.get("/userphotos", (req, res) => {
     const uid = req.headers.uid;
 
     const sql = `
@@ -86,5 +115,4 @@ router.get('/userphotos', (req, res) => {
     });
 });
 
-
-module.exports = router
+module.exports = router;

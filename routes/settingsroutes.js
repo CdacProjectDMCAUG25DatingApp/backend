@@ -33,7 +33,6 @@ router.put("/change-password", (req, res) => {
             
             const updateSQL = "UPDATE users SET password = ? WHERE uid = ?";
             pool.query(updateSQL, [hashed, uid], (err, data) => {
-            console.log(data)
           return res.send(result.createResult(err, "Password updated successfully"));
         });
       });

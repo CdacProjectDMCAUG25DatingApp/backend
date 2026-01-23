@@ -494,7 +494,6 @@ WHERE active = 1 AND uid IN (?)
     ]
     const [candidates] = await pool.promise().query(candidateSql, params)
     if (!candidates.length) {
-      console.log("here")
       return res.send(result.createResult(null, []))
     }
 
