@@ -7,7 +7,6 @@ const config = require("../utils/config");
 
 router.post("/left", (req, res) => {
     const { swiped_token } = req.body;
-    console.log(req.body)
     let swiped_id
     try {
         swiped_id = jwt.verify(swiped_token, config.SECRET).uid;

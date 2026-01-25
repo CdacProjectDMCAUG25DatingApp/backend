@@ -47,6 +47,6 @@ app.use("/settings", settingsRoutes);
 app.use("/chat", chatRoutes);
 app.use("/swipe", swipeRouter);
 
-server.listen(4000, 'localhost', () => {
+server.listen(4000, '0.0.0.0', () => {
     console.log("Server running on port 4000");
 });

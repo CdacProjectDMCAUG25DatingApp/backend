@@ -282,14 +282,28 @@ router.post("/likes/like", (req, res) => {
 router.delete("/likes/ignore", (req, res) => {
     const uid = req.headers.uid;
     const { user_to_ignore } = req.body;
-
     const sql = `
-        DELETE FROM likes 
-        WHERE liker_user_id = ? AND liked_user_id = ?
+    DELETE FROM likes 
+    WHERE liker_user_id = ? AND liked_user_id = ?
     `;
 
-    pool.query(sql, [user_to_ignore, uid], (err, data) => {
-        res.send(result.createResult(err, data));
+    let decoded;
+    try {
+        decoded = jwt.verify(user_to_ignore, config.SECRET);
+    } catch (err) {
+        return res.send(result.createResult("Invalid candidate token"));
+    }
+
+    const liker_user_id = decoded.uid;
+    
+    pool.query(sql, [liker_user_id, uid], (err, data) => {
+        console.log(data)
+        if (err) return res.send(result.createResult(err));
+
+        // Return the ignored user's UID (important)
+        return res.send(
+            result.createResult(null, { uid: user_to_ignore })
+        );
     });
 });
 
@@ -349,10 +363,9 @@ router.delete("/matches/remove", (req, res) => {
     `;
 
     const cleanLikeSQL = `
-        UPDATE likes
-        SET is_match = 0
-        WHERE (liker_user_id = ? AND liked_user_id = ?)
-           OR (liker_user_id = ? AND liked_user_id = ?)
+    DELETE FROM likes
+    WHERE (liker_user_id = ? AND liked_user_id = ?)
+       OR (liker_user_id = ? AND liked_user_id = ?)
     `;
 
     pool.query(cleanMatchSQL, [loggedUser, otherUser, loggedUser, otherUser], (err1) => {
