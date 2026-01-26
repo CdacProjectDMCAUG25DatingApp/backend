@@ -57,4 +57,22 @@ router.post("/send-feedback", (req, res) => {
   });
 });
 
+router.post("/report", (req, res) => {
+  const reporter_id = req.headers.uid;
+  const { reported_id, reason_id, reason_custom } = req.body;
+
+  const sql = `
+    INSERT INTO reports (reporter_id, reported_id, reason_id, reason_custom)
+    VALUES (?, ?, ?, ?)
+  `;
+
+  pool.query(
+    sql,
+    [reporter_id, reported_id, reason_id, reason_custom],
+    (err, data) => {
+      return res.send(result.createResult(err, "Report Submitted"));
+    }
+  );
+});
+
 module.exports = router;

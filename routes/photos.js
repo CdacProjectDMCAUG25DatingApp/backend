@@ -99,15 +99,16 @@ router.get("/userphotos", (req, res) => {
 
     const sql = `
         SELECT photo_id, photo_url, prompt, is_primary
-        FROM userphotos
-        WHERE uid = ? AND is_approved = 1
-        ORDER BY 
-            CASE 
-                WHEN is_primary = 1 THEN 0
-                WHEN is_primary = 2 THEN 1
-                ELSE 2
-            END,
-            uploaded_at ASC
+FROM userphotos
+WHERE uid = ? 
+  AND is_approved = 1
+ORDER BY 
+    CASE 
+        WHEN is_primary = 1 THEN 0 
+        WHEN is_primary = 2 THEN 1   
+        ELSE 2                      
+    END,
+    uploaded_at ASC;
     `;
 
     pool.query(sql, [uid], (err, data) => {
