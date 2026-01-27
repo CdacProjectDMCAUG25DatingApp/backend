@@ -90,6 +90,25 @@ router.get("/getcandidates", async (req, res) => {
         )
 
         AND NOT EXISTS (
+        SELECT 1 FROM likes l
+        WHERE l.liker_user_id = ?
+          AND l.liked_user_id = u.uid
+    )
+
+    AND NOT EXISTS (
+        SELECT 1 FROM likes lm
+        WHERE (
+                lm.liker_user_id = ?
+            AND lm.liked_user_id = u.uid
+            AND lm.is_match = 1
+        ) OR (
+                lm.liker_user_id = u.uid
+            AND lm.liked_user_id = ?
+            AND lm.is_match = 1
+        )
+    )
+
+        AND NOT EXISTS (
           SELECT 1 FROM blockedusers b2
           WHERE b2.blocker_id = u.uid
             AND b2.blocked_id = ?
@@ -98,10 +117,22 @@ router.get("/getcandidates", async (req, res) => {
     `;
 
     const params = [
-      uid,                    // u.uid != ?
-      preferredGenderId,      // MATCH: up.gender = preferred_gender_id
-      uid, uid, uid, uid, uid // exclusions
+      uid,                 // 1 → u.uid != ?
+      preferredGenderId,   // 2 → up.gender = ?
+
+      uid,                 // 3 → swipes/swipes-like: s.swiper_user_id = ?
+      uid,                 // 4 → matches: (m.user_a = ? AND m.user_b = u.uid)
+      uid,                 // 5 → matches: (m.user_b = ? AND m.user_a = u.uid)
+      uid,                 // 6 → blockedusers: b.blocker_id = ?
+
+      uid,                 // 7 → likes: l.liker_user_id = ?
+
+      uid,                 // 8 → matches in likes (lm.liker_user_id = ? AND lm.liked_user_id = u.uid)
+      uid,                 // 9 → matches in likes (lm.liker_user_id = u.uid AND lm.liked_user_id = ?)
+
+      uid                  // 10 → blockedusers reverse: b2.blocker_id = u.uid AND b2.blocked_id = ?
     ];
+
 
     const [candidates] = await pool.promise().query(candidateSql, params);
 
@@ -216,7 +247,7 @@ LEFT JOIN pet p ON pref.pet_id = p.id
 WHERE u.uid IN (?)
 `;
 
-const [profileRows] = await pool.promise().query(profileJoinSql, [sortedIds]);
+    const [profileRows] = await pool.promise().query(profileJoinSql, [sortedIds]);
 
 
     const [photos] = await pool.promise().query(
@@ -497,7 +528,7 @@ WHERE u.uid != ?
   AND u.is_deleted = 0
   AND u.is_banned = 0
 
-  -- ⭐ Main gender match (NO need to pass preferred gender)
+  -- Main gender match (NO need to pass preferred gender)
   AND up.gender = pref_self.preferred_gender_id
 
   -- Exclude matches
@@ -514,6 +545,25 @@ WHERE u.uid != ?
       AND b.blocked_id = u.uid
       AND b.is_deleted = 0
   )
+
+  AND NOT EXISTS (
+        SELECT 1 FROM likes l
+        WHERE l.liker_user_id = ?
+          AND l.liked_user_id = u.uid
+    )
+
+    AND NOT EXISTS (
+        SELECT 1 FROM likes lm
+        WHERE (
+                lm.liker_user_id = ?
+            AND lm.liked_user_id = u.uid
+            AND lm.is_match = 1
+        ) OR (
+                lm.liker_user_id = u.uid
+            AND lm.liked_user_id = ?
+            AND lm.is_match = 1
+        )
+    )
 
   -- Exclude users who blocked you
   AND NOT EXISTS (
@@ -543,13 +593,17 @@ WHERE active = 1 AND uid IN (?)
 
     // 2. Get candidates
     const params = [
-      uid, // pref_self.uid
-      uid, // u.uid != ?
-      uid, // swipes
-      uid, uid, // matches
-      uid, // blocker
-      uid  // blocked
-    ]
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid
+    ];
+
     const [candidates] = await pool.promise().query(candidateSql, params)
     if (!candidates.length) {
       return res.send(result.createResult(null, []))
@@ -621,7 +675,7 @@ WHERE active = 1 AND uid IN (?)
     })
     res.send(result.createResult(null, response))
   } catch (err) {
-   
+
     res.send(result.createResult(err))
   }
 })
