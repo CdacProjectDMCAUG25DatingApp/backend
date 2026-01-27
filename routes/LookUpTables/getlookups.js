@@ -151,5 +151,19 @@ router.get("/pet", (req, res) => {
     );
 });
 
+router.get("/report-reasons", (req, res) => {
+  const sql = `
+    SELECT reason_id, name, description 
+    FROM reportreason 
+    WHERE active = 1 
+    ORDER BY reason_id ASC
+  `;
+
+  pool.query(sql, (err, data) => {
+    res.send(result.createResult(err, data));
+  });
+});
+
+
 
 module.exports =  router;
