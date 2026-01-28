@@ -1,230 +1,311 @@
-const express = require('express')
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
+const express = require("express");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
-const pool = require('../utils/db')
-const result = require('../utils/result')
-const config = require('../utils/config')
+const pool = require("../utils/db");
+const result = require("../utils/result");
+const config = require("../utils/config");
 
-const router = express.Router()
+const router = express.Router();
 
-router.post('/signin', (req, res) => {
-    const { email, password } = req.body
-    const sql = `SELECT * FROM users WHERE email = ?`
-    pool.query(sql, [email], (err, data) => {
-        if (err)
-            res.send(result.createResult(err))
-        else if (data.length == 0)
-            res.send(result.createResult("Invalid Email"))
-        else {
-            // in this else block the data is present i.e 
-            // the user is kept at 0th index in the data array
-            // check for the pasword
-            bcrypt.compare(password, data[0].password, (err, passwordStatus) => {
-                if (passwordStatus) {
-                    const payload = {
-                        uid: data[0].uid,
-                    }
-                    const token = jwt.sign(payload, config.SECRET)
-                    const user = {
-                        token,
-                        name: data[0].user_name,
-                        email: data[0].email,
-                        mobile: data[0].mobile
-                    }
-                    res.send(result.createResult(null, user))
-                }
-                else
-                    res.send(result.createResult('Invalid Password'))
-            })
-        }
-
-    })
-})
-
-router.post('/signup', (req, res) => {
-    const { name, email, password, mobile } = req.body
-
-    const sql = `INSERT INTO users(user_name,email,password,phone_number) VALUES (?,?,?,?)`
-    // create the hashedpassword
-    bcrypt.hash(password, config.SALT_ROUND, (err, hashedPassword) => {
-        if (hashedPassword) {
-            pool.query(sql, [name, email, hashedPassword, mobile], (err, data) => {
-                res.send(result.createResult(err, data))
-            })
-        } else
-            res.send(result.createResult(err))
-    })
-})
-
-router.post('/userprofile', (req, res) => {
-    const { gender, bio, religion, location, motherTongue, marital, dob, education, tagline, jobIndustry } = req.body
-    const uid = req.headers.uid
-    const sql = `INSERT INTO userprofile(uid,bio,gender,location,religion,mother_tongue,marital_status,dob,education,tagline,job_industry_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    pool.query(sql, [uid, bio, gender, location, religion, motherTongue, marital, dob, education, tagline, jobIndustry], (err, data) => {
-        console.log(err)
-        res.send(result.createResult(err, data))
-    })
-})
-
-router.get('/userprofile', (req, res) => {
-    const uid = req.headers.uid
-    const sql = `select * from userprofile where uid = ?`
-    pool.query(sql, [uid], (err, data) => {
-        res.send(result.createResult(err, data))
-    })
-})
-
-router.post('/userpreferences', (req, res) => {
-    const uid = req.headers.uid
-    const { lookingFor, openTo, zodiac, familyPlan, education, communicationStyle, lovestyle, drinking, smoking, workout
-        , dietary, sleepingHabit, Religion, personalityType, pet, gender } = req.body
-    const sql = `insert into userpreferences(uid, looking_for_id,preferred_gender_id, open_to_id, zodiac_id, family_plan_id, education_id, communication_style_id, love_style_id, drinking_id, smoking_id, workout_id, dietary_id, sleeping_habit_id, religion_id, personality_type_id, pet_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    pool.query(sql, [uid, lookingFor, gender, openTo, zodiac, familyPlan, education, communicationStyle, lovestyle, drinking, smoking, workout
-        , dietary, sleepingHabit, Religion, personalityType, pet], (err, data) => {
-            res.send(result.createResult(err, data))
-        })
-})
-
-router.get('/userdetails', (req, res) => {
-    const uid = req.headers.uid
-    const sql = `
+/* ============================================================
+   SQL: FULL USER DETAILS JOIN
+============================================================ */
+const FULL_USER_DETAILS_SQL = `
 SELECT
   u.uid,
   u.user_name,
+  u.email,
+  u.phone_number,
 
-  -- profile
-  g.name AS gender,
-  r.name AS religion,
-  lang.name AS mother_tongue,
-  edu.name AS education,
-  ji.name AS job_industry,
+  -- Profile table
   up.bio,
   up.dob,
   up.height,
   up.weight,
   up.tagline,
   up.location,
+  up.gender,
+  up.religion,
+  up.mother_tongue,
+  up.marital_status,
+  up.education,
+  up.job_industry_id,
 
-  -- preferences
-  pg.name AS preferred_gender,
-  lf.name AS looking_for,
-  ot.name AS open_to,
-  z.name AS zodiac,
-  fp.name AS family_plan,
-  cs.name AS communication_style,
-  ls.name AS love_style,
-  dr.name AS drinking,
-  sm.name AS smoking,
-  wo.name AS workout,
-  di.name AS dietary,
-  sh.name AS sleeping_habit,
-  pt.name AS personality_type,
-  p.name AS pet
+  -- Preferences table
+  pref.preferred_gender_id,
+  pref.looking_for_id,
+  pref.open_to_id,
+  pref.zodiac_id,
+  pref.family_plan_id,
+  pref.education_id,
+  pref.communication_style_id,
+  pref.love_style_id,
+  pref.drinking_id,
+  pref.smoking_id,
+  pref.workout_id,
+  pref.dietary_id,
+  pref.sleeping_habit_id,
+  pref.religion_id,
+  pref.personality_type_id,
+  pref.pet_id
 
 FROM users u
-LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
-LEFT JOIN userpreferences pref ON pref.uid = u.uid AND pref.is_deleted = 0
+LEFT JOIN userprofile up 
+    ON up.uid = u.uid AND up.is_deleted = 0
 
-LEFT JOIN gender g ON up.gender = g.id
-LEFT JOIN religion r ON up.religion = r.id
-LEFT JOIN language lang ON up.mother_tongue = lang.id
-LEFT JOIN education edu ON up.education = edu.id
-LEFT JOIN jobindustry ji ON up.job_industry_id = ji.id
+LEFT JOIN userpreferences pref 
+    ON pref.uid = u.uid AND pref.is_deleted = 0
 
-LEFT JOIN gender pg ON pref.preferred_gender_id = pg.id
-LEFT JOIN lookingfor lf ON pref.looking_for_id = lf.id
-LEFT JOIN opento ot ON pref.open_to_id = ot.id
-LEFT JOIN zodiac z ON pref.zodiac_id = z.id
-LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
-LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
-LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
-LEFT JOIN drinking dr ON pref.drinking_id = dr.id
-LEFT JOIN smoking sm ON pref.smoking_id = sm.id
-LEFT JOIN workout wo ON pref.workout_id = wo.id
-LEFT JOIN dietary di ON pref.dietary_id = di.id
-LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
-LEFT JOIN personalitytype pt ON pref.personality_type_id = pt.id
-LEFT JOIN pet p ON pref.pet_id = p.id
-
-WHERE u.uid IN (?);
+WHERE u.uid = ?;
 `;
-    pool.query(sql, [uid], (err, data) => {
-        res.send(result.createResult(err, data))
-    })
-})
 
-router.get('/userpreferences', (req, res) => {
-    const uid = req.headers.uid
-    const sql = `select * from userpreferences where uid = ?`
-    pool.query(sql, [uid], (err, data) => {
-        res.send(result.createResult(err, data))
-    })
-})
+/* ============================================================
+   📌 SIGNUP
+============================================================ */
+router.post("/signup", (req, res) => {
+    const { name, email, password, mobile } = req.body;
 
-router.patch('/userdetails', (req, res) => {
+    if (!name || !email || !password || !mobile)
+        return res.send(result.createResult("All fields required"));
+
+    bcrypt.hash(password, config.SALT_ROUND, (err, hashed) => {
+        if (err) return res.send(result.createResult(err));
+
+        const sql = `
+            INSERT INTO users (user_name, email, password, mobile)
+            VALUES (?, ?, ?, ?)
+        `;
+
+        pool.query(sql, [name, email, hashed, mobile], (err, data) => {
+            res.send(result.createResult(err, data));
+        });
+    });
+});
+
+/* ============================================================
+   🔥 SIGNIN → RETURN token + user's full details + photos
+============================================================ */
+router.post("/signin", (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password)
+        return res.send(result.createResult("Email and password required"));
+
+    const sql = `SELECT * FROM users WHERE email = ?`;
+
+    pool.query(sql, [email], (err, users) => {
+        if (err) return res.send(result.createResult(err));
+        if (users.length === 0)
+            return res.send(result.createResult("Invalid Email"));
+
+        const user = users[0];
+
+        bcrypt.compare(password, user.password, (err, ok) => {
+            if (!ok) return res.send(result.createResult("Invalid Password"));
+
+            const uid = user.uid;
+
+            // JWT contains uid — secure
+            const token = jwt.sign({ uid }, config.SECRET, { expiresIn: "30d" });
+
+            // Basic user (NO UID exposed)
+            const publicUser = {
+                token,
+                name: user.user_name,
+                email: user.email,
+                mobile: user.mobile,
+            };
+
+            /* -----------------------------------------------------
+               FETCH FULL USER DETAILS + PHOTOS + ONBOARD FLAGS
+            ------------------------------------------------------ */
+            const photosSQL = `
+                SELECT photo_id, photo_url, prompt, is_primary
+                FROM userphotos
+                WHERE uid = ? AND is_approved = 1
+                ORDER BY 
+                    CASE WHEN is_primary = 1 THEN 0
+                         WHEN is_primary = 2 THEN 1
+                         ELSE 2 END,
+                    uploaded_at ASC;
+            `;
+
+            const profileCheckSQL = `
+                SELECT COUNT(*) AS count
+                FROM userprofile
+                WHERE uid = ? AND is_deleted = 0
+            `;
+
+            const prefCheckSQL = `
+                SELECT COUNT(*) AS count
+                FROM userpreferences
+                WHERE uid = ? AND is_deleted = 0
+            `;
+
+            const photosCountSQL = `
+                SELECT COUNT(*) AS total
+                FROM userphotos 
+                WHERE uid = ? AND is_approved = 1
+            `;
+
+            // Run queries
+            pool.query(FULL_USER_DETAILS_SQL, [uid], (err1, userDetailsRows) => {
+                pool.query(photosSQL, [uid], (err2, photosRows) => {
+                    pool.query(profileCheckSQL, [uid], (err3, p1) => {
+                        pool.query(prefCheckSQL, [uid], (err4, p2) => {
+                            pool.query(photosCountSQL, [uid], (err5, p3) => {
+
+                                const fullDetails = userDetailsRows[0] || {};
+                                const photos = photosRows || [];
+
+                                const hasProfile = p1[0].count > 0;
+                                const hasPreferences = p2[0].count > 0;
+                                const hasPhotos = p3[0].total === 6;
+
+                                return res.send(
+                                    result.createResult(null, {
+                                        ...publicUser,      // token, name, etc.
+                                        userdetails: fullDetails,  // full joined data
+                                        photos: photos,             // photo array
+                                        onboarding: {
+                                            needs_profile: !hasProfile,
+                                            needs_photos: !hasPhotos,
+                                            needs_preferences: !hasPreferences
+                                        }
+                                    })
+                                );
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
+});
+module.exports = router;
+
+
+/* ============================================================
+   📌 GET full userdetails (JOINED)
+============================================================ */
+router.get("/userdetails", (req, res) => {
+    const uid = req.headers.uid;
+
+    pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
+        return res.send(result.createResult(err, data?.[0]));
+    });
+});
+
+/* ============================================================
+   📌 PUT userdetails → UPDATE PROFILE & PREFERENCES TOGETHER
+============================================================ */
+router.put("/userdetails", (req, res) => {
     const uid = req.headers.uid;
     const payload = req.body;
+
     if (!uid) return res.send(result.createResult("UID missing"));
     if (!Object.keys(payload).length)
         return res.send(result.createResult("No fields to update"));
 
-    const allowed = {
-        looking_for: "looking_for_id",
-        preferred_gender: "preferred_gender_id",
-        open_to: "open_to_id",
-        zodiac: "zodiac_id",
-        family_plan: "family_plan_id",
-        education: "education_id",
-        communication_style: "communication_style_id",
-        love_style: "love_style_id",
-        drinking: "drinking_id",
-        smoking: "smoking_id",
-        workout: "workout_id",
-        dietary: "dietary_id",
-        sleeping_habit: "sleeping_habit_id",
-        religion: "religion_id",
-        personality_type: "personality_type_id",
-        pet: "pet_id",
+    // Maps frontend fields → database column names
+    const PROFILE_MAP = {
+        bio: "bio",
+        dob: "dob",
+        height: "height",
+        weight: "weight",
+        tagline: "tagline",
+        location: "location",
+        gender: "gender",
+        religion: "religion",
+        mother_tongue: "mother_tongue",
+        marital_status: "marital_status",
+        education: "education",
+        job_industry_id: "job_industry_id",
     };
 
+    const PREF_MAP = {
+        preferred_gender_id: "preferred_gender_id",
+        looking_for_id: "looking_for_id",
+        open_to_id: "open_to_id",
+        zodiac_id: "zodiac_id",
+        family_plan_id: "family_plan_id",
+        education_id: "education_id",
+        communication_style_id: "communication_style_id",
+        love_style_id: "love_style_id",
+        drinking_id: "drinking_id",
+        smoking_id: "smoking_id",
+        workout_id: "workout_id",
+        dietary_id: "dietary_id",
+        sleeping_habit_id: "sleeping_habit_id",
+        religion_id: "religion_id",
+        personality_type_id: "personality_type_id",
+        pet_id: "pet_id",
+    };
 
-    const setClauses = [];
-    const values = [];
+    const profileUpdates = [];
+    const profileValues = [];
 
-    Object.keys(payload).forEach(key => {
-        if (allowed[key]) {
-            setClauses.push(`${allowed[key]} = ?`);
-            values.push(payload[key]);
+    const prefUpdates = [];
+    const prefValues = [];
+
+    // Split fields into correct table
+    for (const [key, value] of Object.entries(payload)) {
+        if (PROFILE_MAP[key]) {
+            profileUpdates.push(`${PROFILE_MAP[key]} = ?`);
+            profileValues.push(value);
         }
-    });
-
-
-
-    if (!setClauses.length) {
-        return res.send(result.createResult("No valid fields"));
+        if (PREF_MAP[key]) {
+            prefUpdates.push(`${PREF_MAP[key]} = ?`);
+            prefValues.push(value);
+        }
     }
 
-    const sql = `
-        UPDATE userpreferences
-        SET ${setClauses.join(", ")}
-        WHERE uid = ? AND is_deleted = 0
-    `;
+    const tasks = [];
 
-    values.push(uid);
+    if (profileUpdates.length) {
+        tasks.push(
+            new Promise((resolve) => {
+                const sql = `
+          UPDATE userprofile
+          SET ${profileUpdates.join(", ")}
+          WHERE uid = ? AND is_deleted = 0
+        `;
+                pool.query(sql, [...profileValues, uid], () => resolve());
+            })
+        );
+    }
 
-    pool.query(sql, values, (err, data) => {
-        res.send(result.createResult(err, data));
+    if (prefUpdates.length) {
+        tasks.push(
+            new Promise((resolve) => {
+                const sql = `
+          UPDATE userpreferences
+          SET ${prefUpdates.join(", ")}
+          WHERE uid = ? AND is_deleted = 0
+        `;
+                pool.query(sql, [...prefValues, uid], () => resolve());
+            })
+        );
+    }
+
+    // Return updated userdetails
+    Promise.all(tasks).then(() => {
+        pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
+            return res.send(result.createResult(err, data?.[0]));
+        });
     });
 });
 
-router.patch('/photo/prompt', (req, res) => {
+/* ============================================================
+   📌 PATCH: Update Photo Prompt
+============================================================ */
+router.patch("/photo/prompt", (req, res) => {
     const uid = req.headers.uid;
     const { photo_id, prompt } = req.body;
 
-    if (!uid || !photo_id) {
-        return res.send(result.createResult("Missing uid or photo_id", null));
-    }
+    if (!uid || !photo_id)
+        return res.send(result.createResult("Missing uid or photo_id"));
 
     const sql = `
         UPDATE userphotos
@@ -233,61 +314,8 @@ router.patch('/photo/prompt', (req, res) => {
     `;
 
     pool.query(sql, [prompt, photo_id, uid], (err, data) => {
-        res.send(result.createResult(err, data));
+        return res.send(result.createResult(err, data));
     });
 });
 
-// routes/user.js
-router.patch("/profile", (req, res) => {
-    const uid = req.headers.uid;
-    const payload = req.body;
-
-    if (!uid || !Object.keys(payload).length) {
-        return res.send(result.createResult("Invalid request", null));
-    }
-
-    const allowedFields = [
-        "bio",
-        "height",
-        "weight",
-        "gender",
-        "tagline",
-        "dob",
-        "marital_status",
-        "location",
-        "mother_tongue",
-        "religion",
-        "education",
-        "job_industry_id"
-    ];
-
-    const setClauses = [];
-    const values = [];
-
-    Object.keys(payload).forEach((key) => {
-        if (allowedFields.includes(key)) {
-            setClauses.push(`${key} = ?`);
-            values.push(payload[key]);
-        }
-    });
-
-    if (!setClauses.length) {
-        return res.send(result.createResult("No valid fields", null));
-    }
-
-    const sql = `
-    UPDATE userprofile
-    SET ${setClauses.join(", ")}
-    WHERE uid = ? AND is_deleted = 0
-  `;
-
-    values.push(uid);
-
-    pool.query(sql, values, (err, data) => {
-        res.send(result.createResult(err, data));
-    });
-});
-
-
-
-module.exports = router
+module.exports = router;
