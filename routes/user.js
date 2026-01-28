@@ -300,7 +300,7 @@ router.put("/userdetails", (req, res) => {
 /* ============================================================
    📌 PATCH: Update Photo Prompt
 ============================================================ */
-router.patch("/photo/prompt", (req, res) => {
+router.patch("/prompt", (req, res) => {
     const uid = req.headers.uid;
     const { photo_id, prompt } = req.body;
 

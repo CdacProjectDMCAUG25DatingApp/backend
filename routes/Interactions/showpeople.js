@@ -7,31 +7,82 @@ const jwt = require('jsonwebtoken')
 
 const router = express.Router()
 
+const FULL_USER_DETAILS_SQL = `
+SELECT
+  u.uid,
+  u.user_name,
+  u.email,
+  u.phone_number,
 
+  -- Profile table
+  up.bio,
+  up.dob,
+  up.height,
+  up.weight,
+  up.tagline,
+  up.location,
+  up.gender,
+  up.religion,
+  up.mother_tongue,
+  up.marital_status,
+  up.education,
+  up.job_industry_id,
+
+  -- Preferences table
+  pref.preferred_gender_id,
+  pref.looking_for_id,
+  pref.open_to_id,
+  pref.zodiac_id,
+  pref.family_plan_id,
+  pref.education_id,
+  pref.communication_style_id,
+  pref.love_style_id,
+  pref.drinking_id,
+  pref.smoking_id,
+  pref.workout_id,
+  pref.dietary_id,
+  pref.sleeping_habit_id,
+  pref.religion_id,
+  pref.personality_type_id,
+  pref.pet_id
+
+FROM users u
+LEFT JOIN userprofile up 
+    ON up.uid = u.uid AND up.is_deleted = 0
+
+LEFT JOIN userpreferences pref 
+    ON pref.uid = u.uid AND pref.is_deleted = 0
+
+WHERE u.uid = ?;
+`;
 
 router.get("/getcandidates", async (req, res) => {
   const uid = Number(req.headers.uid);
   if (!uid) return res.send(result.createResult("UID required"));
 
   try {
-    // 1️⃣ Get CURRENT USER'S preferred gender
-    const [prefRows] = await pool.promise().query(
+    //  Get CURRENT USER'S preferences
+    const [[selfPref]] = await pool.promise().query(
       `SELECT preferred_gender_id 
        FROM userpreferences 
        WHERE uid = ? AND is_deleted = 0`,
       [uid]
     );
 
-    if (!prefRows.length || !prefRows[0].preferred_gender_id) {
+    if (!selfPref || !selfPref.preferred_gender_id) {
       return res.send(result.createResult("Preferred gender not set"));
     }
 
-    const preferredGenderId = prefRows[0].preferred_gender_id;
+    const preferredGender = selfPref.preferred_gender_id;
 
-    // 2️⃣ Find candidates with that gender
+    //  Fetch matching candidates (lightweight)
     const candidateSql = `
-      SELECT
+      SELECT 
         u.uid,
+        u.user_name,
+        up.tagline,
+        up.dob,
+        up.location,
         up.gender,
         up.religion,
         up.mother_tongue,
@@ -54,223 +105,99 @@ router.get("/getcandidates", async (req, res) => {
       FROM users u
 
       LEFT JOIN userprofile up 
-        ON up.uid = u.uid 
-       AND up.is_active = 1
-       AND up.is_deleted = 0
+        ON up.uid = u.uid AND up.is_deleted = 0
 
-      LEFT JOIN userpreferences pref
-        ON pref.uid = u.uid
-       AND pref.is_deleted = 0
+      LEFT JOIN userpreferences pref 
+        ON pref.uid = u.uid AND pref.is_deleted = 0
 
       WHERE u.uid != ?
+        AND up.gender = ?
         AND u.is_deleted = 0
         AND u.is_banned = 0
-        
-        -- THE MAIN GENDER MATCH FILTER
-        AND up.gender = ?
 
-        -- Exclude users already swiped, matched, or blocked
-        AND NOT EXISTS (
-          SELECT 1 FROM swipes s
-          WHERE s.swiper_user_id = ?
+      -- exclude swiped
+      AND NOT EXISTS (
+        SELECT 1 FROM swipes s 
+        WHERE s.swiper_user_id = ? 
           AND s.swiped_user_id = u.uid
-        )
+      )
 
-        AND NOT EXISTS (
-          SELECT 1 FROM matches m
-          WHERE (m.user_a = ? AND m.user_b = u.uid)
-             OR (m.user_b = ? AND m.user_a = u.uid)
-        )
+      -- exclude matches
+      AND NOT EXISTS (
+        SELECT 1 FROM matches m
+        WHERE (m.user_a = ? AND m.user_b = u.uid)
+           OR (m.user_b = ? AND m.user_a = u.uid)
+      )
 
-        AND NOT EXISTS (
-          SELECT 1 FROM blockedusers b
-          WHERE b.blocker_id = ?
-            AND b.blocked_id = u.uid
-            AND b.is_deleted = 0
-        )
+      -- exclude blocked
+      AND NOT EXISTS (
+        SELECT 1 FROM blockedusers b
+        WHERE b.blocker_id = ? 
+          AND b.blocked_id = u.uid 
+          AND b.is_deleted = 0
+      )
 
-        AND NOT EXISTS (
-        SELECT 1 FROM likes l
-        WHERE l.liker_user_id = ?
-          AND l.liked_user_id = u.uid
-    )
-
-    AND NOT EXISTS (
-        SELECT 1 FROM likes lm
-        WHERE (
-                lm.liker_user_id = ?
-            AND lm.liked_user_id = u.uid
-            AND lm.is_match = 1
-        ) OR (
-                lm.liker_user_id = u.uid
-            AND lm.liked_user_id = ?
-            AND lm.is_match = 1
-        )
-    )
-
-        AND NOT EXISTS (
-          SELECT 1 FROM blockedusers b2
-          WHERE b2.blocker_id = u.uid
-            AND b2.blocked_id = ?
-            AND b2.is_deleted = 0
-        )
+      AND NOT EXISTS (
+        SELECT 1 FROM blockedusers b2
+        WHERE b2.blocker_id = u.uid
+          AND b2.blocked_id = ? 
+          AND b2.is_deleted = 0
+      )
     `;
 
-    const params = [
-      uid,                 // 1 → u.uid != ?
-      preferredGenderId,   // 2 → up.gender = ?
-
-      uid,                 // 3 → swipes/swipes-like: s.swiper_user_id = ?
-      uid,                 // 4 → matches: (m.user_a = ? AND m.user_b = u.uid)
-      uid,                 // 5 → matches: (m.user_b = ? AND m.user_a = u.uid)
-      uid,                 // 6 → blockedusers: b.blocker_id = ?
-
-      uid,                 // 7 → likes: l.liker_user_id = ?
-
-      uid,                 // 8 → matches in likes (lm.liker_user_id = ? AND lm.liked_user_id = u.uid)
-      uid,                 // 9 → matches in likes (lm.liker_user_id = u.uid AND lm.liked_user_id = ?)
-
-      uid                  // 10 → blockedusers reverse: b2.blocker_id = u.uid AND b2.blocked_id = ?
-    ];
-
-
+    const params = [uid, preferredGender, uid, uid, uid, uid, uid];
     const [candidates] = await pool.promise().query(candidateSql, params);
 
-    if (!candidates.length) {
+    if (!candidates.length)
       return res.send(result.createResult(null, []));
-    }
 
-    // 3️⃣ rest of your logic unchanged
-    const candidateIds = candidates.map(u => u.uid);
+    const candidateIds = candidates.map(c => c.uid);
 
-    const [interests] = await pool.promise().query(
-      `SELECT uid, interest_id FROM userinterest WHERE active = 1 AND uid IN (?)`,
-      [candidateIds]
-    );
-
-    const [languages] = await pool.promise().query(
-      `SELECT uid, language_id FROM userlanguage WHERE active = 1 AND uid IN (?)`,
-      [candidateIds]
-    );
-
-    const interestMap = {};
-    interests.forEach(i => {
-      interestMap[i.uid] ??= [];
-      interestMap[i.uid].push(i.interest_id);
-    });
-
-    const languageMap = {};
-    languages.forEach(l => {
-      languageMap[l.uid] ??= [];
-      languageMap[l.uid].push(l.language_id);
-    });
-
-    const finalCandidates = candidates.map(u => ({
-      ...u,
-      interests: interestMap[u.uid] || [],
-      languages: languageMap[u.uid] || []
-    }));
-
-    const self = await getSelf(uid);
-    if (!self) return res.send(result.createResult(null, []));
-
-    const calculatedCandidates = finalCandidates
-      .map(c => {
-        const scoring = calculateScore(self, c);
-        return {
-          uid: c.uid,
-          score: scoring.score,
-          match_interests_count: scoring.match_interests_count
-        };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    const sortedIds = calculatedCandidates.map(c => c.uid);
-
-    const profileJoinSql = `
-SELECT
-  u.uid,
-  u.user_name,
-
-  g.name AS gender,
-  r.name AS religion,
-  lang.name AS mother_tongue,
-  edu.name AS education,
-  ji.name AS job_industry,
-  up.bio,
-  up.dob,
-  up.height,
-  up.weight,
-  up.tagline,
-  up.location,
-
-  pg.name AS preferred_gender,
-  lf.name AS looking_for,
-  ot.name AS open_to,
-  z.name AS zodiac,
-  fp.name AS family_plan,
-  cs.name AS communication_style,
-  ls.name AS love_style,
-  dr.name AS drinking,
-  sm.name AS smoking,
-  wo.name AS workout,
-  di.name AS dietary,
-  sh.name AS sleeping_habit,
-  pt.name AS personality_type,
-  p.name AS pet
-
-FROM users u
-LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
-LEFT JOIN userpreferences pref ON pref.uid = u.uid AND pref.is_deleted = 0
-
-LEFT JOIN gender g ON up.gender = g.id
-LEFT JOIN religion r ON up.religion = r.id
-LEFT JOIN language lang ON up.mother_tongue = lang.id
-LEFT JOIN education edu ON up.education = edu.id
-LEFT JOIN jobindustry ji ON up.job_industry_id = ji.id
-
-LEFT JOIN gender pg ON pref.preferred_gender_id = pg.id
-LEFT JOIN lookingfor lf ON pref.looking_for_id = lf.id
-LEFT JOIN opento ot ON pref.open_to_id = ot.id
-LEFT JOIN zodiac z ON pref.zodiac_id = z.id
-LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
-LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
-LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
-LEFT JOIN drinking dr ON pref.drinking_id = dr.id
-LEFT JOIN smoking sm ON pref.smoking_id = sm.id
-LEFT JOIN workout wo ON pref.workout_id = wo.id
-LEFT JOIN dietary di ON pref.dietary_id = di.id
-LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
-LEFT JOIN personalitytype pt ON pref.personality_type_id = pt.id
-LEFT JOIN pet p ON pref.pet_id = p.id
-
-WHERE u.uid IN (?)
-`;
-
-    const [profileRows] = await pool.promise().query(profileJoinSql, [sortedIds]);
-
-
+    // Fetch ONLY primary card photo (is_primary = 2)
     const [photos] = await pool.promise().query(
-      `SELECT uid, photo_url, prompt FROM userphotos WHERE uid IN (?) ORDER BY is_primary DESC`,
-      [sortedIds]
+      `SELECT uid, photo_url 
+       FROM userphotos 
+       WHERE uid IN (?) AND is_primary = 2 
+       ORDER BY uploaded_at ASC`,
+      [candidateIds]
     );
 
     const photoMap = {};
     photos.forEach(p => {
-      photoMap[p.uid] ??= [];
-      photoMap[p.uid].push({ photo_url: p.photo_url, prompt: p.prompt });
+      photoMap[p.uid] = p.photo_url;
     });
 
-    const response = calculatedCandidates.map(c => {
-      const profile = profileRows.find(p => p.uid === c.uid) || {};
-      const { uid, ...safeProfile } = profile;
+    // Get self object for scoring
+    const self = await getSelf(uid);
+
+    // Calculate score
+    const scoredCandidates = candidates.map(c => {
+      const { score, match_interests_count } = calculateScore(self, c);
+      return {
+        uid: c.uid,
+        score,
+        match_interests_count,
+        candidateData: c
+      };
+    }).sort((a, b) => b.score - a.score);
+
+    //  Build final lightweight response
+    const response = scoredCandidates.map(c => {
+      const u = c.candidateData;
 
       return {
-        token: signCandidateToken(c.uid),
+        token: signCandidateToken(u.uid),
         score: c.score,
         match_interests_count: c.match_interests_count,
-        candidateData: safeProfile,
-        photos: photoMap[c.uid] || []
+
+        user_name: u.user_name,
+        tagline: u.tagline,
+        location: u.location,
+
+        age: u.dob ? getAge(u.dob) : null,
+
+        // show the CARD photo (is_primary = 2)
+        photo: photoMap[u.uid] || null
       };
     });
 
@@ -281,6 +208,13 @@ WHERE u.uid IN (?)
     res.send(result.createResult(err));
   }
 });
+
+function getAge(d) {
+  const dob = new Date(d);
+  const diff = Date.now() - dob.getTime();
+  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+}
+
 
 
 const signCandidateToken = (uid) => {     //uid in recommended candidate must not be passed as it is so converting it into token
@@ -679,6 +613,57 @@ WHERE active = 1 AND uid IN (?)
     res.send(result.createResult(err))
   }
 })
+
+router.get("/getcandidate_full", async (req, res) => {
+  try {
+    const token = req.headers.candidate_token;
+    if (!token) return res.send(result.createResult("Candidate token missing"));
+
+    // decode the candidate token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.SECRET);
+    } catch (err) {
+      return res.send(result.createResult("Invalid token"));
+    }
+
+    const candidateUid = decoded.uid;
+
+    // 1. fetch full user details
+    const [profileRows] = await pool
+      .promise()
+      .query(FULL_USER_DETAILS_SQL, [candidateUid]);
+
+    if (!profileRows.length) {
+      return res.send(result.createResult("User not found"));
+    }
+
+    const profileData = profileRows[0];
+
+    // 2. fetch photos
+    const [photoRows] = await pool.promise().query(
+      `SELECT photo_id, photo_url, prompt, is_primary
+       FROM userphotos
+       WHERE uid = ?
+       ORDER BY is_primary DESC`,
+      [candidateUid]
+    );
+
+    return res.send(
+      result.createResult(null, {
+        profileData,
+        photos: photoRows,
+      })
+    );
+  } catch (err) {
+    console.log(err);
+    return res.send(result.createResult(err));
+  }
+});
+
+
+module.exports = router;
+
 
 
 

@@ -97,4 +97,57 @@ router.get("/userphotos", (req, res) => {
   });
 });
 
+router.put("/replace", upload.single("photo"), async (req, res) => {
+  try {
+    const { photo_id } = req.body;
+    const file = req.file;
+
+    if (!photo_id || !file) {
+      return res.send(result.createResult("photo_id and new file required"));
+    }
+
+    // 1) Get old photo details
+    const [[oldPhoto]] = await pool.promise().query(
+      "SELECT photo_url FROM userphotos WHERE photo_id = ?",
+      [photo_id]
+    );
+
+    if (!oldPhoto) {
+      return res.send(result.createResult("Photo not found"));
+    }
+
+    const oldPath = path.join("profilePhotos", oldPhoto.photo_url);
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+
+    // 2) Generate new filename
+    const newFileName = `${photo_id}-${Date.now()}.webp`;
+    const newFilePath = path.join("profilePhotos", newFileName);
+
+    // 3) Save new file using sharp
+    await sharp(file.buffer)
+      .resize(900, 1200, { fit: "cover" })
+      .webp({ quality: 85 })
+      .toFile(newFilePath);
+
+    // 4) Update DB
+    await pool.promise().query(
+      "UPDATE userphotos SET photo_url = ? WHERE photo_id = ?",
+      [newFileName, photo_id]
+    );
+
+    res.send(
+      result.createResult(null, {
+        updated: true,
+        photo_id,
+        new_url: newFileName,
+      })
+    );
+  } catch (err) {
+    console.log(err);
+    res.send(result.createResult(err));
+  }
+});
+
+
+
 module.exports = router;
