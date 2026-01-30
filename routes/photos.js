@@ -149,5 +149,26 @@ router.put("/replace", upload.single("photo"), async (req, res) => {
 });
 
 
+/* ============================================================
+   📌 PATCH: Update Photo Prompt
+============================================================ */
+router.patch("/prompt", (req, res) => {
+    const uid = req.headers.uid;
+    const { photo_id, prompt } = req.body;
+
+    if (!uid || !photo_id)
+        return res.send(result.createResult("Missing uid or photo_id"));
+
+    const sql = `
+        UPDATE userphotos
+        SET prompt = ?
+        WHERE photo_id = ? AND uid = ? AND is_deleted = 0
+    `;
+
+    pool.query(sql, [prompt, photo_id, uid], (err, data) => {
+        return res.send(result.createResult(err, data));
+    });
+});
+
 
 module.exports = router;

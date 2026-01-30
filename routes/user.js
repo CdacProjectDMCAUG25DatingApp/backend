@@ -61,7 +61,7 @@ WHERE u.uid = ?;
 `;
 
 /* ============================================================
-   📌 SIGNUP
+    SIGNUP
 ============================================================ */
 router.post("/signup", (req, res) => {
     const { name, email, password, mobile } = req.body;
@@ -73,7 +73,7 @@ router.post("/signup", (req, res) => {
         if (err) return res.send(result.createResult(err));
 
         const sql = `
-            INSERT INTO users (user_name, email, password, mobile)
+            INSERT INTO users (user_name, email, password, phone_number)
             VALUES (?, ?, ?, ?)
         `;
 
@@ -84,7 +84,7 @@ router.post("/signup", (req, res) => {
 });
 
 /* ============================================================
-   🔥 SIGNIN → RETURN token + user's full details + photos
+  SIGNIN → RETURN token + user's full details + photos
 ============================================================ */
 router.post("/signin", (req, res) => {
     const { email, password } = req.body;
@@ -101,6 +101,11 @@ router.post("/signin", (req, res) => {
 
         const user = users[0];
 
+        // BAN CHECK (ADD THIS)
+        if (user.is_banned === 1) {
+            return res.send(result.createResult("Your ID is banned"));
+        }
+
         bcrypt.compare(password, user.password, (err, ok) => {
             if (!ok) return res.send(result.createResult("Invalid Password"));
 
@@ -109,17 +114,13 @@ router.post("/signin", (req, res) => {
             // JWT contains uid — secure
             const token = jwt.sign({ uid }, config.SECRET, { expiresIn: "30d" });
 
-            // Basic user (NO UID exposed)
             const publicUser = {
                 token,
                 name: user.user_name,
                 email: user.email,
-                mobile: user.mobile,
+                mobile: user.phone_number, // fix: use correct column
             };
 
-            /* -----------------------------------------------------
-               FETCH FULL USER DETAILS + PHOTOS + ONBOARD FLAGS
-            ------------------------------------------------------ */
             const photosSQL = `
                 SELECT photo_id, photo_url, prompt, is_primary
                 FROM userphotos
@@ -149,7 +150,6 @@ router.post("/signin", (req, res) => {
                 WHERE uid = ? AND is_approved = 1
             `;
 
-            // Run queries
             pool.query(FULL_USER_DETAILS_SQL, [uid], (err1, userDetailsRows) => {
                 pool.query(photosSQL, [uid], (err2, photosRows) => {
                     pool.query(profileCheckSQL, [uid], (err3, p1) => {
@@ -165,9 +165,9 @@ router.post("/signin", (req, res) => {
 
                                 return res.send(
                                     result.createResult(null, {
-                                        ...publicUser,      // token, name, etc.
-                                        userdetails: fullDetails,  // full joined data
-                                        photos: photos,             // photo array
+                                        ...publicUser,
+                                        userdetails: fullDetails,
+                                        photos,
                                         onboarding: {
                                             needs_profile: !hasProfile,
                                             needs_photos: !hasPhotos,
@@ -183,31 +183,31 @@ router.post("/signin", (req, res) => {
         });
     });
 });
-module.exports = router;
+
 
 
 /* ============================================================
-   📌 GET full userdetails (JOINED)
+ GET full userdetails (JOINED)
 ============================================================ */
 router.get("/userdetails", (req, res) => {
     const uid = req.headers.uid;
-
+    
     pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
         return res.send(result.createResult(err, data?.[0]));
     });
 });
 
 /* ============================================================
-   📌 PUT userdetails → UPDATE PROFILE & PREFERENCES TOGETHER
+ PUT userdetails → UPDATE PROFILE & PREFERENCES TOGETHER
 ============================================================ */
 router.put("/userdetails", (req, res) => {
     const uid = req.headers.uid;
     const payload = req.body;
-
+    
     if (!uid) return res.send(result.createResult("UID missing"));
     if (!Object.keys(payload).length)
         return res.send(result.createResult("No fields to update"));
-
+    
     // Maps frontend fields → database column names
     const PROFILE_MAP = {
         bio: "bio",
@@ -223,7 +223,7 @@ router.put("/userdetails", (req, res) => {
         education: "education",
         job_industry_id: "job_industry_id",
     };
-
+    
     const PREF_MAP = {
         preferred_gender_id: "preferred_gender_id",
         looking_for_id: "looking_for_id",
@@ -242,13 +242,13 @@ router.put("/userdetails", (req, res) => {
         personality_type_id: "personality_type_id",
         pet_id: "pet_id",
     };
-
+    
     const profileUpdates = [];
     const profileValues = [];
-
+    
     const prefUpdates = [];
     const prefValues = [];
-
+    
     // Split fields into correct table
     for (const [key, value] of Object.entries(payload)) {
         if (PROFILE_MAP[key]) {
@@ -260,35 +260,35 @@ router.put("/userdetails", (req, res) => {
             prefValues.push(value);
         }
     }
-
+    
     const tasks = [];
-
+    
     if (profileUpdates.length) {
         tasks.push(
             new Promise((resolve) => {
                 const sql = `
-          UPDATE userprofile
-          SET ${profileUpdates.join(", ")}
-          WHERE uid = ? AND is_deleted = 0
-        `;
+                UPDATE userprofile
+                SET ${profileUpdates.join(", ")}
+                WHERE uid = ? AND is_deleted = 0
+                `;
                 pool.query(sql, [...profileValues, uid], () => resolve());
             })
         );
     }
-
+    
     if (prefUpdates.length) {
         tasks.push(
             new Promise((resolve) => {
                 const sql = `
-          UPDATE userpreferences
-          SET ${prefUpdates.join(", ")}
-          WHERE uid = ? AND is_deleted = 0
-        `;
+                UPDATE userpreferences
+                SET ${prefUpdates.join(", ")}
+                WHERE uid = ? AND is_deleted = 0
+                `;
                 pool.query(sql, [...prefValues, uid], () => resolve());
             })
         );
     }
-
+    
     // Return updated userdetails
     Promise.all(tasks).then(() => {
         pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
@@ -297,25 +297,5 @@ router.put("/userdetails", (req, res) => {
     });
 });
 
-/* ============================================================
-   📌 PATCH: Update Photo Prompt
-============================================================ */
-router.patch("/prompt", (req, res) => {
-    const uid = req.headers.uid;
-    const { photo_id, prompt } = req.body;
-
-    if (!uid || !photo_id)
-        return res.send(result.createResult("Missing uid or photo_id"));
-
-    const sql = `
-        UPDATE userphotos
-        SET prompt = ?
-        WHERE photo_id = ? AND uid = ? AND is_deleted = 0
-    `;
-
-    pool.query(sql, [prompt, photo_id, uid], (err, data) => {
-        return res.send(result.createResult(err, data));
-    });
-});
 
 module.exports = router;
