@@ -73,7 +73,7 @@ router.post("/signup", (req, res) => {
         if (err) return res.send(result.createResult(err));
 
         const sql = `
-            INSERT INTO users (user_name, email, password, mobile)
+            INSERT INTO users (user_name, email, password, phone_number)
             VALUES (?, ?, ?, ?)
         `;
 
