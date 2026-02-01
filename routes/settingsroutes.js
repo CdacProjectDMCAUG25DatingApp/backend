@@ -79,7 +79,7 @@ router.post("/report", (req, res) => {
     reporter_id,
     reported_id_derived,
     reason_id,
-    reason_id === 99 ? reason_custom : null,
+    reason_id == 99 ? reason_custom : null,
   ];
 
   pool.query(sql, params, (err, data) => {
@@ -92,7 +92,7 @@ router.post("/report", (req, res) => {
 router.post("/block", (req, res) => {
   const blocker_id = req.headers.uid; // decoded in middleware
   const { blocked_id } = req.body;
-
+  console.log(req.body)
   if (!blocked_id)
     return res.send(result.createResult("blocked_id is required"));
 
@@ -112,7 +112,7 @@ router.post("/block", (req, res) => {
   `;
 
   pool.query(checkSQL, [blocker_id, blocked_uid], (err, rows) => {
-    console.log(err)
+
     if (err) return res.send(result.createResult(err));
 
     if (rows.length > 0) {
@@ -125,7 +125,6 @@ router.post("/block", (req, res) => {
     `;
 
     pool.query(insertSQL, [blocker_id, blocked_uid], (err, data) => {
-
       return res.send(result.createResult(err, "User Blocked Successfully"));
     });
   });
@@ -138,24 +137,38 @@ router.get("/blocked-list", (req, res) => {
     SELECT 
     b.block_id,
     b.blocked_id,
-    u.user_name,
     u.uid,
-    b.blocked_at,
-    p.photo_url
+    u.user_name,
+    g.name AS gender,
+    up.dob,
+    TIMESTAMPDIFF(YEAR, up.dob, CURDATE()) AS age,
+    p.photo_url,
+    b.blocked_at
 FROM blockedusers b
+
 JOIN users u 
     ON b.blocked_id = u.uid
-LEFT JOIN userphotos p 
-    ON p.uid = u.uid 
-    AND p.is_primary = 1 
+
+LEFT JOIN userprofile up
+    ON up.uid = u.uid
+    AND up.is_deleted = 0
+
+LEFT JOIN gender g
+    ON up.gender = g.id
+
+LEFT JOIN userphotos p
+    ON p.uid = u.uid
+    AND p.is_primary = 1
     AND p.is_deleted = 0
+
 WHERE b.blocker_id = ?
   AND b.is_deleted = 0
-ORDER BY b.blocked_at DESC;
 
-  `;
+ORDER BY b.blocked_at DESC;
+`;
 
   pool.query(sql, [blocker_id], (err, data) => {
+    console.log(data)
     return res.send(result.createResult(err, data));
   });
 });

@@ -193,7 +193,7 @@ router.get("/userdetails", (req, res) => {
     const uid = req.headers.uid;
     
     pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
-        return res.send(result.createResult(err, data?.[0]));
+        return res.send(result.createResult(err, {...data?.[0],token : req.headers.token}));
     });
 });
 
