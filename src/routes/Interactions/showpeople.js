@@ -61,7 +61,7 @@ router.get("/getcandidates", async (req, res) => {
   if (!uid) return res.send(result.createResult("UID required"));
 
   try {
-    // 1. Fetch current user’s preferred gender
+    //  Get CURRENT USER'S preferences
     const [[selfPref]] = await pool.promise().query(
       `SELECT preferred_gender_id 
        FROM userpreferences 
@@ -69,21 +69,25 @@ router.get("/getcandidates", async (req, res) => {
       [uid]
     );
 
-    if (!selfPref || !selfPref.preferred_gender_id)
+    if (!selfPref || !selfPref.preferred_gender_id) {
       return res.send(result.createResult("Preferred gender not set"));
+    }
 
     const preferredGender = selfPref.preferred_gender_id;
 
-    // 2. Fetch candidates (ONLY required fields)
+    //  Fetch matching candidates (lightweight)
     const candidateSql = `
       SELECT 
         u.uid,
-        u.user_name AS name,
+        u.user_name,
         up.tagline,
         up.dob,
         up.location,
         up.gender,
-        g.name AS gender_name,
+        up.religion,
+        up.mother_tongue,
+        up.education,
+        up.job_industry_id,
 
         pref.looking_for_id,
         pref.open_to_id,
@@ -96,50 +100,49 @@ router.get("/getcandidates", async (req, res) => {
         pref.dietary_id,
         pref.sleeping_habit_id,
         pref.personality_type_id,
-        pref.pet_id,
-        up.education,
-        up.religion,
-        up.mother_tongue,
-        up.job_industry_id
+        pref.pet_id
 
       FROM users u
-      LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
-      LEFT JOIN userpreferences pref ON pref.uid = u.uid AND pref.is_deleted = 0
-      LEFT JOIN gender g ON up.gender = g.id
+
+      LEFT JOIN userprofile up 
+        ON up.uid = u.uid AND up.is_deleted = 0
+
+      LEFT JOIN userpreferences pref 
+        ON pref.uid = u.uid AND pref.is_deleted = 0
 
       WHERE u.uid != ?
         AND up.gender = ?
         AND u.is_deleted = 0
         AND u.is_banned = 0
 
-        -- exclude swiped
-        AND NOT EXISTS (
-          SELECT 1 FROM swipes s 
-          WHERE s.swiper_user_id = ? 
-            AND s.swiped_user_id = u.uid
-        )
+      -- exclude swiped
+      AND NOT EXISTS (
+        SELECT 1 FROM swipes s 
+        WHERE s.swiper_user_id = ? 
+          AND s.swiped_user_id = u.uid
+      )
 
-        -- exclude matches
-        AND NOT EXISTS (
-          SELECT 1 FROM matches m
-           WHERE (m.user_a = ? AND m.user_b = u.uid)
-              OR (m.user_b = ? AND m.user_a = u.uid)
-        )
+      -- exclude matches
+      AND NOT EXISTS (
+        SELECT 1 FROM matches m
+        WHERE (m.user_a = ? AND m.user_b = u.uid)
+           OR (m.user_b = ? AND m.user_a = u.uid)
+      )
 
-        -- exclude blocked
-        AND NOT EXISTS (
-          SELECT 1 FROM blockedusers b
-          WHERE b.blocker_id = ? 
-            AND b.blocked_id = u.uid 
-            AND b.is_deleted = 0
-        )
+      -- exclude blocked
+      AND NOT EXISTS (
+        SELECT 1 FROM blockedusers b
+        WHERE b.blocker_id = ? 
+          AND b.blocked_id = u.uid 
+          AND b.is_deleted = 0
+      )
 
-        AND NOT EXISTS (
-          SELECT 1 FROM blockedusers b2
-          WHERE b2.blocker_id = u.uid
-            AND b2.blocked_id = ?
-            AND b2.is_deleted = 0
-        )
+      AND NOT EXISTS (
+        SELECT 1 FROM blockedusers b2
+        WHERE b2.blocker_id = u.uid
+          AND b2.blocked_id = ? 
+          AND b2.is_deleted = 0
+      )
     `;
 
     const params = [uid, preferredGender, uid, uid, uid, uid, uid];
@@ -150,40 +153,55 @@ router.get("/getcandidates", async (req, res) => {
 
     const candidateIds = candidates.map(c => c.uid);
 
-    // 3. Fetch one photo (primary)
+    // Fetch ONLY primary card photo (is_primary = 2)
     const [photos] = await pool.promise().query(
       `SELECT uid, photo_url 
        FROM userphotos 
-       WHERE uid IN (?) AND is_primary = 2`,
+       WHERE uid IN (?) AND is_primary = 2 
+       ORDER BY uploaded_at ASC`,
       [candidateIds]
     );
 
     const photoMap = {};
-    photos.forEach(p => photoMap[p.uid] = p.photo_url);
+    photos.forEach(p => {
+      photoMap[p.uid] = p.photo_url;
+    });
 
-    // 4. Fetch current user preferences for scoring
+    // Get self object for scoring
     const self = await getSelf(uid);
 
-    // 5. Build final response
+    // Calculate score
     const scoredCandidates = candidates.map(c => {
       const { score, match_interests_count } = calculateScore(self, c);
-
       return {
         uid: c.uid,
-        user_name: c.name,
-        tagline: c.tagline,
-        gender: c.gender_name,
-        location: c.location,
-        age: c.dob ? getAge(c.dob) : null,
-
         score,
         match_interests_count,
-        photo: photoMap[c.uid] || null,
-        token: signCandidateToken(c.uid)
+        candidateData: c
       };
     }).sort((a, b) => b.score - a.score);
 
-    res.send(result.createResult(null, scoredCandidates));
+    //  Build final lightweight response
+    const response = scoredCandidates.map(c => {
+      const u = c.candidateData;
+
+      return {
+        token: signCandidateToken(u.uid),
+        score: c.score,
+        match_interests_count: c.match_interests_count,
+
+        user_name: u.user_name,
+        tagline: u.tagline,
+        location: u.location,
+
+        age: u.dob ? getAge(u.dob) : null,
+
+        // show the CARD photo (is_primary = 2)
+        photo: photoMap[u.uid] || null
+      };
+    });
+
+    res.send(result.createResult(null, response));
 
   } catch (err) {
     console.error(err);
@@ -333,8 +351,76 @@ const getSelf = async (uid) => {            // Creating Object of Our Profile an
 
 
 router.get("/getcandidates_again", async (req, res) => {
-  const uid = Number(req.headers.uid);
-  if (!uid) return res.send(result.createResult("UID required"));
+  const uid = Number(req.headers.uid)
+  const responseSql = `
+SELECT
+  u.uid,
+  u.user_name,
+
+  -- profile
+  g.name AS gender,
+  r.name AS religion,
+  lang.name AS mother_tongue,
+  edu.name AS education,
+  ji.name AS job_industry,
+  up.bio,
+  up.dob,
+  up.height,
+  up.weight,
+  up.tagline,
+  up.location,
+
+  -- preferences
+  pg.name AS preferred_gender,
+  lf.name AS looking_for,
+  ot.name AS open_to,
+  z.name AS zodiac,
+  fp.name AS family_plan,
+  cs.name AS communication_style,
+  ls.name AS love_style,
+  dr.name AS drinking,
+  sm.name AS smoking,
+  wo.name AS workout,
+  di.name AS dietary,
+  sh.name AS sleeping_habit,
+  pt.name AS personality_type,
+  p.name AS pet
+
+FROM users u
+LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
+LEFT JOIN userpreferences pref ON pref.uid = u.uid AND pref.is_deleted = 0
+
+LEFT JOIN gender g ON up.gender = g.id
+LEFT JOIN religion r ON up.religion = r.id
+LEFT JOIN language lang ON up.mother_tongue = lang.id
+LEFT JOIN education edu ON up.education = edu.id
+LEFT JOIN jobindustry ji ON up.job_industry_id = ji.id
+
+LEFT JOIN gender pg ON pref.preferred_gender_id = pg.id
+LEFT JOIN lookingfor lf ON pref.looking_for_id = lf.id
+LEFT JOIN opento ot ON pref.open_to_id = ot.id
+LEFT JOIN zodiac z ON pref.zodiac_id = z.id
+LEFT JOIN familyplans fp ON pref.family_plan_id = fp.id
+LEFT JOIN communicationstyle cs ON pref.communication_style_id = cs.id
+LEFT JOIN lovestyle ls ON pref.love_style_id = ls.id
+LEFT JOIN drinking dr ON pref.drinking_id = dr.id
+LEFT JOIN smoking sm ON pref.smoking_id = sm.id
+LEFT JOIN workout wo ON pref.workout_id = wo.id
+LEFT JOIN dietary di ON pref.dietary_id = di.id
+LEFT JOIN sleepinghabit sh ON pref.sleeping_habit_id = sh.id
+LEFT JOIN personalitytype pt ON pref.personality_type_id = pt.id
+LEFT JOIN pet p ON pref.pet_id = p.id
+
+WHERE u.uid IN (?);
+`;
+
+  const photosSql = `
+SELECT uid, photo_url , prompt
+FROM userphotos
+WHERE uid IN (?)
+ORDER BY is_primary DESC
+`
+
 
   const candidateSql = `SELECT
     u.uid,
@@ -435,124 +521,98 @@ FROM userlanguage
 WHERE active = 1 AND uid IN (?)
 `
 
-
   try {
-    // 1. Get all possible candidates (reusing your logic)
+
+    if (!uid) return res.send(result.createResult("UID required"))
+
+    // 2. Get candidates
     const params = [
-      uid, uid, uid, uid, uid,
-      uid, uid, uid, uid
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid,
+      uid
     ];
 
-    const [candidates] = await pool.promise().query(candidateSql, params);
-    if (!candidates.length)
-      return res.send(result.createResult(null, []));
+    const [candidates] = await pool.promise().query(candidateSql, params)
+    if (!candidates.length) {
+      return res.send(result.createResult(null, []))
+    }
 
-    const candidateIds = candidates.map(u => u.uid);
 
-    // 2. Interests
-    const [interests] = await pool.promise().query(interestSql, [candidateIds]);
-    const interestMap = {};
-    interests.forEach(i => {
-      interestMap[i.uid] ??= [];
-      interestMap[i.uid].push(i.interest_id);
-    });
+    const candidateIds = candidates.map(u => u.uid)
+    // 3. Interests
+    const [interests] = await pool.promise().query(interestSql, [candidateIds])
 
-    // 3. Languages
-    const [languages] = await pool.promise().query(languageSql, [candidateIds]);
-    const languageMap = {};
-    languages.forEach(l => {
-      languageMap[l.uid] ??= [];
-      languageMap[l.uid].push(l.language_id);
-    });
+    // 4. Languages
+    const [languages] = await pool.promise().query(languageSql, [candidateIds])
 
-    // 4. Add interests + languages
+    // 5. Map interests & languages
+    // Interests table has intrest = {uid,intrest_id} 
+    const interestMap = {}
+    interests.forEach(i => {                       // interests is from the userinterests junction table not from interests look up table
+      interestMap[i.uid] ??= []                   // The Map has data as {"7": [2, 5],"9": [1]} 
+      interestMap[i.uid].push(i.interest_id)     // Like a dictionary 
+    })
+
+    const languageMap = {}                  // languages is from the userlanguage junction table not from language look up table
+    languages.forEach(l => {               // The Map has data as {"7": [2, 5],"9": [1]} 
+      languageMap[l.uid] ??= []           // Like a dictionary 
+      languageMap[l.uid].push(l.language_id)
+    })
     const finalCandidates = candidates.map(u => ({
       ...u,
-      interests: interestMap[u.uid] || [],
+      interests: interestMap[u.uid] || [],      //Key are uid and value has array of interests of that userid
       languages: languageMap[u.uid] || []
-    }));
-
-    // 5. Scoring
-    const self = await getSelf(uid);
-    if (!self) return res.send(result.createResult(null, []));
-
-    const calculatedCandidates = finalCandidates
-      .map(c => {
-        const { score, match_interests_count } = calculateScore(self, c);
+    }))
+    const self = await getSelf(uid)
+    if (!self) {
+      return res.send(result.createResult(null, []))
+    }
+    const calculatedCandidates = finalCandidates  // final candidates are possible people that can be seen in the application
+      .map(candidate => {  //candidate is the each finalCandidate 
+        const scoreANDmatch_interests_count = calculateScore(self, candidate)
         return {
-          uid: c.uid,
-          score,
-          match_interests_count
-        };
+          uid: candidate.uid,
+          score: scoreANDmatch_interests_count.score,  //calculated score of each candidate
+          match_interests_count: scoreANDmatch_interests_count.match_interests_count
+        }
       })
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => b.score - a.score)        // sorted based on that score descendingly 
 
-    const sortedIds = calculatedCandidates.map(c => c.uid);
 
-    // 6. Profile fetch (with gender name)
-    const [profileRows] = await pool.promise().query(
-      `
-      SELECT 
-        u.uid,
-        u.user_name AS name,
-        up.tagline,
-        up.dob,
-        up.location,
-        g.name AS gender_name
-      FROM users u
-      LEFT JOIN userprofile up ON up.uid = u.uid AND up.is_deleted = 0
-      LEFT JOIN gender g ON up.gender = g.id
-      WHERE u.uid IN (?)
-      `,
-      [sortedIds]
-    );
-
-    // 7. Photos
-    const [photos] = await pool.promise().query(
-      `
-      SELECT uid, photo_url 
-      FROM userphotos
-      WHERE uid IN (?) 
-      ORDER BY is_primary DESC
-      `,
-      [sortedIds]
-    );
-
-    const photoMap = {};
+    //sorted Ids are id taken out of calculatedCandidates( {uid: value , score : value} )  
+    const sortedIds = calculatedCandidates.map(c => c.uid)  //calculatedCandidates( {uid: value , score : value} )  are uid and calculated score to final candidates
+    const [responseSqlResult] = await pool.promise().query(responseSql, [sortedIds])
+    const [photos] = await pool.promise().query(photosSql, [sortedIds])
+    const photoMap = {}
     photos.forEach(p => {
-      if (!photoMap[p.uid]) photoMap[p.uid] = [];
-      photoMap[p.uid].push(p.photo_url);
-    });
+      photoMap[p.uid] ??= []
+      photoMap[p.uid].push({ photo_url: p.photo_url, prompt: p.prompt })
+    })
+    const response = calculatedCandidates.map(c => {     //Create the response as array of candidates(objects{token(string),score(int),candidateData{},photos[]})
 
-    // 8. Final mapping (same as first API)
-    const response = calculatedCandidates.map(c => {
-      const p = profileRows.find(x => x.uid === c.uid) || {};
-
+      const profileOfEachCandidate = responseSqlResult.find(p => p.uid === c.uid) || {} // taking profile from profile table that matches uid from calculatedProfile
+      const { uid, ...safeProfileOfEachCandidate } = profileOfEachCandidate
       return {
-        uid: c.uid,
-        user_name: p.name || "",
-        tagline: p.tagline || "",
-        gender: p.gender_name || null,
-        location: p.location || "",
-        age: p.dob ? getAge(p.dob) : null,
-
+        token: signCandidateToken(c.uid),
         score: c.score,
         match_interests_count: c.match_interests_count,
+        candidateData: safeProfileOfEachCandidate,
+        photos: photoMap[c.uid] || []
+      }
 
-        photo: photoMap[c.uid]?.[0] || null,
-
-        token: signCandidateToken(c.uid)
-      };
-    });
-
-    res.send(result.createResult(null, response));
-
+    })
+    res.send(result.createResult(null, response))
   } catch (err) {
-    console.error(err);
-    res.send(result.createResult(err));
-  }
-});
 
+    res.send(result.createResult(err))
+  }
+})
 
 router.get("/getcandidate_full", async (req, res) => {
   try {
