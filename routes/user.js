@@ -345,7 +345,7 @@ router.post("/profile", (req, res) => {
     });
 });
 
-router.post("/preferences", (req, res) => {
+router.post("/userpreferences", (req, res) => {
     const uid = req.headers.uid;
     const payload = req.body;
 
@@ -395,6 +395,27 @@ router.post("/preferences", (req, res) => {
         return res.send(result.createResult(null, "Preferences set"));
     });
 });
+
+router.get("/userpreferences", async (req, res) => {
+  try {
+    const uid = req.headers.uid;
+    if (!uid) {
+      return res.send(result.createResult("Missing uid"));
+    }
+    const sql = `SELECT * FROM userpreferences WHERE uid = ?`;
+    pool.query(sql, [uid], (err, rows) => {
+      if (err) {
+        return res.send(result.createResult("Database error"));
+      }
+      res.send(result.createResult(null, rows));
+    });
+
+  } catch (err) {
+    console.log(err);
+    res.send(result.createResult("Server error"));
+  }
+});
+
 
 
 module.exports = router;

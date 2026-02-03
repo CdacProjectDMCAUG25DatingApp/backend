@@ -9,7 +9,6 @@ const router = express.Router()
 
 const FULL_USER_DETAILS_SQL = `
 SELECT
-  u.uid,
   u.user_name,
   u.email,
   u.phone_number,
@@ -169,7 +168,6 @@ router.get("/getcandidates", async (req, res) => {
       const { score, match_interests_count } = calculateScore(self, c);
 
       return {
-        uid: c.uid,
         user_name: c.name,
         tagline: c.tagline,
         gender: c.gender_name,
@@ -529,18 +527,14 @@ WHERE active = 1 AND uid IN (?)
       const p = profileRows.find(x => x.uid === c.uid) || {};
 
       return {
-        uid: c.uid,
         user_name: p.name || "",
         tagline: p.tagline || "",
         gender: p.gender_name || null,
         location: p.location || "",
         age: p.dob ? getAge(p.dob) : null,
-
         score: c.score,
         match_interests_count: c.match_interests_count,
-
         photo: photoMap[c.uid]?.[0] || null,
-
         token: signCandidateToken(c.uid)
       };
     });
@@ -578,7 +572,7 @@ router.get("/getcandidate_full", async (req, res) => {
       return res.send(result.createResult("User not found"));
     }
 
-    const profileData = profileRows[0];
+    const profileData = {...profileRows[0],token};
 
     // 2. fetch photos
     const [photoRows] = await pool.promise().query(
