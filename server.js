@@ -26,13 +26,15 @@ const io = new Server(server, {
 const setupSocket = require("./socket");
 setupSocket(io);
 
-// CORS
+// ========== CORS SETUP ==========
+const allowedOrigins = [
+    "https://flertecdacdmcproject.netlify.app",
+    "http://localhost:5173"
+];
+
 app.use(cors({
     origin: (origin, callback) => {
-        const allowed = [
-            "https://flertecdacdmcproject.netlify.app"
-        ];
-        if (!origin || allowed.includes(origin)) {
+        if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             callback(new Error("CORS blocked"));
@@ -41,14 +43,27 @@ app.use(cors({
     credentials: true,
 }));
 
-// Static + JSON
+
 app.use('/profilePhotos', express.static('profilePhotos'));
 app.use(express.json());
 
-// Auth middleware (exclude signin/signup)
-app.use(authorizeUser);
+app.use((req, res, next) => {
+    // Allow all CORS preflight requests
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(200);
+    }
 
-// Routers
+    // Allow signin + signup without token
+    if (
+        req.path === "/user/signin" ||
+        req.path === "/user/signup"
+    ) {
+        return next();
+    }
+    authorizeUser(req, res, next);
+});
+
+// ========== ROUTES ==========
 app.use('/user', userRouter);
 app.use("/photos", photoRouter);
 app.use('/api', lookUpRouter);
@@ -58,6 +73,7 @@ app.use("/settings", settingsRoutes);
 app.use("/chat", chatRoutes);
 app.use("/swipe", swipeRouter);
 
+// ========== START SERVER ==========
 server.listen(4000, '0.0.0.0', () => {
     console.log("Server running on port 4000");
 });
