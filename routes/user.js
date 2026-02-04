@@ -1,421 +1,94 @@
-const express = require("express");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+// builtin modules
+const express = require('express');
+const cors = require('cors');
+const http = require('http');
+const { Server } = require("socket.io");
 
-const pool = require("../utils/db");
-const result = require("../utils/result");
-const config = require("../utils/config");
+// userdefined modules
+const authorizeUser = require('./utils/authuser');
+const userRouter = require("./routes/user");
+const photoRouter = require("./routes/photos");
+const lookUpRouter = require('./routes/LookUpTables/getlookups');
+const showpeopleRouter = require("./routes/Interactions/showpeople");
+const likeesandmatches = require("./routes/Interactions/likesnmatches");
+const settingsRoutes = require("./routes/settingsroutes");
+const chatRoutes = require("./routes/chat");
+const swipeRouter = require("./routes/swipes");
 
-const router = express.Router();
+const app = express();
+const server = http.createServer(app);
 
-/* ============================================================
-   SQL: FULL USER DETAILS JOIN
-============================================================ */
-const FULL_USER_DETAILS_SQL = `
-SELECT
-  u.uid,
-  u.user_name,
-  u.email,
-  u.phone_number,
-
-  -- Profile table
-  up.bio,
-  up.dob,
-  up.height,
-  up.weight,
-  up.tagline,
-  up.location,
-  up.gender,
-  up.religion,
-  up.mother_tongue,
-  up.marital_status,
-  up.education,
-  up.job_industry_id,
-
-  -- Preferences table
-  pref.preferred_gender_id,
-  pref.looking_for_id,
-  pref.open_to_id,
-  pref.zodiac_id,
-  pref.family_plan_id,
-  pref.education_id,
-  pref.communication_style_id,
-  pref.love_style_id,
-  pref.drinking_id,
-  pref.smoking_id,
-  pref.workout_id,
-  pref.dietary_id,
-  pref.sleeping_habit_id,
-  pref.religion_id,
-  pref.personality_type_id,
-  pref.pet_id
-
-FROM users u
-LEFT JOIN userprofile up 
-    ON up.uid = u.uid AND up.is_deleted = 0
-
-LEFT JOIN userpreferences pref 
-    ON pref.uid = u.uid AND pref.is_deleted = 0
-
-WHERE u.uid = ?;
-`;
-
-/* ============================================================
-    SIGNUP
-============================================================ */
-router.post("/signup", (req, res) => {
-    const { name, email, password, mobile } = req.body;
-
-    if (!name || !email || !password || !mobile)
-        return res.send(result.createResult("All fields required"));
-
-    bcrypt.hash(password, config.SALT_ROUND, (err, hashed) => {
-        if (err) return res.send(result.createResult(err));
-
-        const sql = `
-            INSERT INTO users (user_name, email, password, phone_number)
-            VALUES (?, ?, ?, ?)
-        `;
-
-        pool.query(sql, [name, email, hashed, mobile], (err, data) => {
-            res.send(result.createResult(err, data));
-        });
-    });
+// SOCKET IO
+const io = new Server(server, {
+    cors: { origin: "*" }
 });
-
-/* ============================================================
-  SIGNIN → RETURN token + user's full details + photos
-============================================================ */
-router.post("/signin", (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password)
-        return res.send(result.createResult("Email and password required"));
-
-    const sql = `SELECT * FROM users WHERE email = ?`;
-
-    pool.query(sql, [email], (err, users) => {
-        if (err) return res.send(result.createResult(err));
-        if (users.length === 0)
-            return res.send(result.createResult("Invalid Email"));
-
-        const user = users[0];
-
-        // BAN CHECK (ADD THIS)
-        if (user.is_banned === 1) {
-            return res.send(result.createResult("Your ID is banned"));
-        }
-
-        bcrypt.compare(password, user.password, (err, ok) => {
-            if (!ok) return res.send(result.createResult("Invalid Password"));
-
-            const uid = user.uid;
-
-            // JWT contains uid — secure
-            const token = jwt.sign({ uid }, config.SECRET, { expiresIn: "30d" });
-
-            const publicUser = {
-                token,
-                name: user.user_name,
-                email: user.email,
-                mobile: user.phone_number, // fix: use correct column
-            };
-
-            const photosSQL = `
-                SELECT photo_id, photo_url, prompt, is_primary
-                FROM userphotos
-                WHERE uid = ? AND is_approved = 1
-                ORDER BY 
-                    CASE WHEN is_primary = 1 THEN 0
-                         WHEN is_primary = 2 THEN 1
-                         ELSE 2 END,
-                    uploaded_at ASC;
-            `;
-
-            const profileCheckSQL = `
-                SELECT COUNT(*) AS count
-                FROM userprofile
-                WHERE uid = ? AND is_deleted = 0
-            `;
-
-            const prefCheckSQL = `
-                SELECT COUNT(*) AS count
-                FROM userpreferences
-                WHERE uid = ? AND is_deleted = 0
-            `;
-
-            const photosCountSQL = `
-                SELECT COUNT(*) AS total
-                FROM userphotos 
-                WHERE uid = ? AND is_approved = 1
-            `;
-
-            pool.query(FULL_USER_DETAILS_SQL, [uid], (err1, userDetailsRows) => {
-                pool.query(photosSQL, [uid], (err2, photosRows) => {
-                    pool.query(profileCheckSQL, [uid], (err3, p1) => {
-                        pool.query(prefCheckSQL, [uid], (err4, p2) => {
-                            pool.query(photosCountSQL, [uid], (err5, p3) => {
-
-                                const fullDetails = userDetailsRows[0] || {};
-                                const photos = photosRows || [];
-
-                                const hasProfile = p1[0].count > 0;
-                                const hasPreferences = p2[0].count > 0;
-                                const hasPhotos = p3[0].total === 6;
-
-                                return res.send(
-                                    result.createResult(null, {
-                                        ...publicUser,
-                                        userdetails: fullDetails,
-                                        photos,
-                                        onboarding: {
-                                            needs_profile: !hasProfile,
-                                            needs_photos: !hasPhotos,
-                                            needs_preferences: !hasPreferences
-                                        }
-                                    })
-                                );
-                            });
-                        });
-                    });
-                });
-            });
-        });
-    });
-});
+require("./socket")(io);
 
 
+// ===============================
+//  **GLOBAL CORS HEADERS** (first middleware)
+// ===============================
+const allowedOrigins = [
+    "https://flertecdacdmcproject.netlify.app",
+    "http://localhost:5173",
+];
 
-/* ============================================================
- GET full userdetails (JOINED)
-============================================================ */
-router.get("/userdetails", (req, res) => {
-    const uid = req.headers.uid;
-    
-    pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
-        return res.send(result.createResult(err, {...data?.[0],token : req.headers.token}));
-    });
-});
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
 
-/* ============================================================
- PUT userdetails → UPDATE PROFILE & PREFERENCES TOGETHER
-============================================================ */
-router.put("/userdetails", (req, res) => {
-    const uid = req.headers.uid;
-    const payload = req.body;
-    
-    if (!uid) return res.send(result.createResult("UID missing"));
-    if (!Object.keys(payload).length)
-        return res.send(result.createResult("No fields to update"));
-    
-    // Maps frontend fields → database column names
-    const PROFILE_MAP = {
-        bio: "bio",
-        dob: "dob",
-        height: "height",
-        weight: "weight",
-        tagline: "tagline",
-        location: "location",
-        gender: "gender",
-        religion: "religion",
-        mother_tongue: "mother_tongue",
-        marital_status: "marital_status",
-        education: "education",
-        job_industry_id: "job_industry_id",
-    };
-    
-    const PREF_MAP = {
-        preferred_gender_id: "preferred_gender_id",
-        looking_for_id: "looking_for_id",
-        open_to_id: "open_to_id",
-        zodiac_id: "zodiac_id",
-        family_plan_id: "family_plan_id",
-        education_id: "education_id",
-        communication_style_id: "communication_style_id",
-        love_style_id: "love_style_id",
-        drinking_id: "drinking_id",
-        smoking_id: "smoking_id",
-        workout_id: "workout_id",
-        dietary_id: "dietary_id",
-        sleeping_habit_id: "sleeping_habit_id",
-        religion_id: "religion_id",
-        personality_type_id: "personality_type_id",
-        pet_id: "pet_id",
-    };
-    
-    const profileUpdates = [];
-    const profileValues = [];
-    
-    const prefUpdates = [];
-    const prefValues = [];
-    
-    // Split fields into correct table
-    for (const [key, value] of Object.entries(payload)) {
-        if (PROFILE_MAP[key]) {
-            profileUpdates.push(`${PROFILE_MAP[key]} = ?`);
-            profileValues.push(value);
-        }
-        if (PREF_MAP[key]) {
-            prefUpdates.push(`${PREF_MAP[key]} = ?`);
-            prefValues.push(value);
-        }
-    }
-    
-    const tasks = [];
-    
-    if (profileUpdates.length) {
-        tasks.push(
-            new Promise((resolve) => {
-                const sql = `
-                UPDATE userprofile
-                SET ${profileUpdates.join(", ")}
-                WHERE uid = ? AND is_deleted = 0
-                `;
-                pool.query(sql, [...profileValues, uid], () => resolve());
-            })
-        );
-    }
-    
-    if (prefUpdates.length) {
-        tasks.push(
-            new Promise((resolve) => {
-                const sql = `
-                UPDATE userpreferences
-                SET ${prefUpdates.join(", ")}
-                WHERE uid = ? AND is_deleted = 0
-                `;
-                pool.query(sql, [...prefValues, uid], () => resolve());
-            })
-        );
-    }
-    
-    // Return updated userdetails
-    Promise.all(tasks).then(() => {
-        pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
-            return res.send(result.createResult(err, data?.[0]));
-        });
-    });
-});
-
-router.post("/profile", (req, res) => {
-    const uid = req.headers.uid;
-    const payload = req.body;
-
-    if (!uid) return res.send(result.createResult("UID missing"));
-
-    // Columns allowed to insert
-    const allowed = {
-        bio: "bio",
-        gender: "gender",
-        dob: "dob",
-        height: "height",
-        weight: "weight",
-        tagline: "tagline",
-        location: "location",
-        religion_id: "religion",
-        education_id: "education",
-        mother_tongue_id: "mother_tongue",
-        marital_status: "marital_status",
-        job_industry_id: "job_industry_id",
-    };
-
-    const cols = ["uid"];
-    const vals = [uid];
-    const placeholders = ["?"];
-
-    for (const [key, dbCol] of Object.entries(allowed)) {
-        if (payload[key] !== undefined && payload[key] !== "") {
-            cols.push(dbCol);
-            vals.push(payload[key]);
-            placeholders.push("?");
-        }
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
     }
 
-    const sql = `
-        INSERT INTO userprofile (${cols.join(", ")})
-        VALUES (${placeholders.join(", ")})
-    `;
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-    pool.query(sql, vals, (err) => {
-        if (err) {
-            return res.send(result.createResult(err));
-        }
-
-        return res.send(result.createResult(null, "Profile created"));
-    });
-});
-
-router.post("/userpreferences", (req, res) => {
-    const uid = req.headers.uid;
-    const payload = req.body;
-
-    if (!uid) return res.send(result.createResult("UID missing"));
-
-    const allowed = {
-        preferred_gender_id: "preferred_gender_id",
-        looking_for_id: "looking_for_id",
-        open_to_id: "open_to_id",
-        zodiac_id: "zodiac_id",
-        education_id: "education_id",
-        family_plan_id: "family_plan_id",
-        communication_style_id: "communication_style_id",
-        love_style_id: "love_style_id",
-        drinking_id: "drinking_id",
-        smoking_id: "smoking_id",
-        workout_id: "workout_id",
-        dietary_id: "dietary_id",
-        sleeping_habit_id: "sleeping_habit_id",
-        religion_id: "religion_id",
-        personality_type_id: "personality_type_id",
-        pet_id: "pet_id"
-    };
-
-    const cols = ["uid"];
-    const vals = [uid];
-    const placeholders = ["?"];
-
-    for (const [key, dbCol] of Object.entries(allowed)) {
-        if (payload[key] !== undefined && payload[key] !== "") {
-            cols.push(dbCol);
-            vals.push(payload[key]);
-            placeholders.push("?");
-        }
+    // Preflight bypass
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(200);
     }
 
-    const sql = `
-        INSERT INTO userpreferences (${cols.join(", ")})
-        VALUES (${placeholders.join(", ")})
-    `;
-
-    pool.query(sql, vals, (err) => {
-        if (err) {
-            return res.send(result.createResult(err));
-        }
-
-        return res.send(result.createResult(null, "Preferences set"));
-    });
+    next();
 });
 
-router.get("/userpreferences", async (req, res) => {
-  try {
-    const uid = req.headers.uid;
-    if (!uid) {
-      return res.send(result.createResult("Missing uid"));
+
+// ===============================
+//  Static + JSON body parser
+// ===============================
+app.use('/profilePhotos', express.static('profilePhotos'));
+app.use(express.json());
+
+
+// ===============================
+//  AUTH (bypass signin/signup)
+// ===============================
+app.use((req, res, next) => {
+    // login/register allowed
+    if (req.path === "/user/signin" || req.path === "/user/signup") {
+        return next();
     }
-    const sql = `SELECT * FROM userpreferences WHERE uid = ?`;
-    pool.query(sql, [uid], (err, rows) => {
-      if (err) {
-        return res.send(result.createResult("Database error"));
-      }
-      res.send(result.createResult(null, rows));
-    });
 
-  } catch (err) {
-    console.log(err);
-    res.send(result.createResult("Server error"));
-  }
+    authorizeUser(req, res, next);
 });
 
 
+// ===============================
+// ROUTES
+// ===============================
+app.use('/user', userRouter);
+app.use("/photos", photoRouter);
+app.use('/api', lookUpRouter);
+app.use('/interactions', showpeopleRouter);
+app.use('/likeesandmatches', likeesandmatches);
+app.use("/settings", settingsRoutes);
+app.use("/chat", chatRoutes);
+app.use("/swipe", swipeRouter);
 
-module.exports = router;
+
+// ===============================
+//  START SERVER
+// ===============================
+server.listen(4000, '0.0.0.0', () => {
+    console.log("✔ Server running on port 4000");
+});
