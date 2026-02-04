@@ -37,6 +37,25 @@ app.use(express.json());
 // Auth middleware ONLY for API routes (NOT for socket.io)
 app.use(authorizeUser);
 
+
+//CORS Problem
+const allowedOrigins = [
+    "https://flertecdacdmcproject.netlify.app",
+];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("CORS blocked"));
+        }
+    },
+    credentials: true,
+}));
+
+app.options("*", cors());
+
 // Routers
 app.use('/user', userRouter);
 app.use("/photos", photoRouter);
