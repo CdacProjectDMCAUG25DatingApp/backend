@@ -54,3 +54,10 @@ app.use("/swipe", swipeRouter);
 server.listen(4000, '0.0.0.0', () => {
     console.log("Server running on port 4000");
 });
+
+const pool = require("./utils/db");
+
+pool.query("SELECT 1")
+  .then(() => console.log("DB OK"))
+  .catch(err => console.error("DB FAIL:", err));
+
