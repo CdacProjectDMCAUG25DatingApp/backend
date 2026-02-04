@@ -26,7 +26,7 @@ const io = new Server(server, {
 const setupSocket = require("./socket");
 setupSocket(io);
 
-
+// CORS
 app.use(cors({
     origin: (origin, callback) => {
         const allowed = [
@@ -40,9 +40,6 @@ app.use(cors({
     },
     credentials: true,
 }));
-
-// Preflight (Express v5 safe wildcard)
-app.options("/*", cors());
 
 // Static + JSON
 app.use('/profilePhotos', express.static('profilePhotos'));
