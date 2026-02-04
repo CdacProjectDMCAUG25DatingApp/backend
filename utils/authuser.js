@@ -1,86 +1,25 @@
-// builtin modules
-const express = require('express');
-const cors = require('cors');
-const http = require('http');
-const { Server } = require("socket.io");
+const jwt = require('jsonwebtoken')
+const result = require('./result')
+const config = require('./config')
 
-// userdefined modules
-const authorizeUser = require('./utils/authuser');
-const userRouter = require("./routes/user");
-const photoRouter = require("./routes/photos");
-const lookUpRouter = require('./routes/LookUpTables/getlookups');
-const showpeopleRouter = require("./routes/Interactions/showpeople");
-const likeesandmatches = require("./routes/Interactions/likesnmatches");
-const settingsRoutes = require("./routes/settingsroutes");
-const chatRoutes = require("./routes/chat");
-const swipeRouter = require("./routes/swipes");
-
-const app = express();
-const server = http.createServer(app);
-
-// socket.io
-const io = new Server(server, {
-    cors: { origin: "*" }
-});
-require("./socket")(io);
-
-// ============================================
-// 1. GLOBAL CORS HEADERS (must be FIRST)
-// ============================================
-const allowedOrigins = [
-    "https://flertecdacdmcproject.netlify.app",
-    "http://localhost:5173",
-];
-
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-
-    if (allowedOrigins.includes(origin)) {
-        res.setHeader("Access-Control-Allow-Origin", origin);
+function authorizeUser(req, res, next) {
+    // For checking the incoming request and the token
+    const url = req.url
+    if (url == '/user/signin' || url == '/user/signup') // for these 2 routes no token is required
+        next()
+    else {
+        const token = req.headers.token
+        if (token) {
+            try {
+                const payload = jwt.verify(token, config.SECRET)
+                req.headers.uid = payload.uid
+                next()
+            } catch (ex) {
+                res.send(result.createResult('Invalid Token'))
+            }
+        } else
+            res.send(result.createResult('Token is Missing'))
     }
+}
 
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, token");
-
-    // Preflight OPTIONS must exit before hitting authorizeUser
-    if (req.method === "OPTIONS") {
-        return res.status(200).end();
-    }
-
-    next();
-});
-
-// ============================================
-// 2. Static + JSON parsing
-// ============================================
-app.use('/profilePhotos', express.static('profilePhotos'));
-app.use(express.json());
-
-// ============================================
-// 3. AUTHORIZATION (your authuser.js unchanged)
-// ============================================
-app.use((req, res, next) => {
-    // Your authorizeUser already bypasses:
-    // /user/signin and /user/signup
-    authorizeUser(req, res, next);
-});
-
-// ============================================
-// 4. ROUTES
-// ============================================
-app.use('/user', userRouter);
-app.use("/photos", photoRouter);
-app.use('/api', lookUpRouter);
-app.use('/interactions', showpeopleRouter);
-app.use('/likeesandmatches', likeesandmatches);
-app.use("/settings", settingsRoutes);
-app.use("/chat", chatRoutes);
-app.use("/swipe", swipeRouter);
-
-// ============================================
-// 5. Start Server
-// ============================================
-server.listen(4000, '0.0.0.0', () => {
-    console.log("✔ Server running on port 4000");
-});
+module.exports = authorizeUser

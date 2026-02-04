@@ -1,8 +1,10 @@
+// builtin modules
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require("socket.io");
 
+// userdefined modules
 const authorizeUser = require('./utils/authuser');
 const userRouter = require("./routes/user");
 const photoRouter = require("./routes/photos");
@@ -22,9 +24,9 @@ const io = new Server(server, {
 });
 require("./socket")(io);
 
-// ========================
-// 1. CORS (first middleware)
-// ========================
+// ============================================
+// 1. GLOBAL CORS HEADERS (must be FIRST)
+// ============================================
 const allowedOrigins = [
     "https://flertecdacdmcproject.netlify.app",
     "http://localhost:5173",
@@ -38,10 +40,10 @@ app.use((req, res, next) => {
     }
 
     res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, token");
 
-    // PRE-FLIGHT (OPTIONS) MUST RETURN 200
+    // Preflight OPTIONS must exit before hitting authorizeUser
     if (req.method === "OPTIONS") {
         return res.status(200).end();
     }
@@ -49,29 +51,24 @@ app.use((req, res, next) => {
     next();
 });
 
-// ========================
-// 2. JSON + Static
-// ========================
-app.use(express.json());
+// ============================================
+// 2. Static + JSON parsing
+// ============================================
 app.use('/profilePhotos', express.static('profilePhotos'));
+app.use(express.json());
 
-// ========================
-// 3. AUTH (skip signin/signup)
-// ========================
+// ============================================
+// 3. AUTHORIZATION (your authuser.js unchanged)
+// ============================================
 app.use((req, res, next) => {
-    if (
-        req.path === "/user/signin" ||
-        req.path === "/user/signup"
-    ) {
-        return next();
-    }
-
+    // Your authorizeUser already bypasses:
+    // /user/signin and /user/signup
     authorizeUser(req, res, next);
 });
 
-// ========================
-// 4. Routes
-// ========================
+// ============================================
+// 4. ROUTES
+// ============================================
 app.use('/user', userRouter);
 app.use("/photos", photoRouter);
 app.use('/api', lookUpRouter);
@@ -81,9 +78,9 @@ app.use("/settings", settingsRoutes);
 app.use("/chat", chatRoutes);
 app.use("/swipe", swipeRouter);
 
-// ========================
+// ============================================
 // 5. Start Server
-// ========================
+// ============================================
 server.listen(4000, '0.0.0.0', () => {
     console.log("✔ Server running on port 4000");
 });
