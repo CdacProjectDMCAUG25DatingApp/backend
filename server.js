@@ -18,6 +18,7 @@ const swipeRouter = require("./routes/swipes");
 
 // Initialize express + HTTP server
 const app = express();
+app.use(cors());
 const server = http.createServer(app);
 
 // Setup Socket.io
@@ -30,7 +31,6 @@ const setupSocket = require("./socket");
 setupSocket(io);
 
 // Middlewares
-app.use(cors());
 app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json());
 
