@@ -20,6 +20,10 @@ const swipeRouter = require("./routes/swipes");
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
+app.use((req, res, next) => {
+    console.log("⭐ Incoming request:", req.method, req.url);
+    next();
+});
 
 // Setup Socket.io
 const io = new Server(server, {
@@ -33,10 +37,6 @@ setupSocket(io);
 // Middlewares
 app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json());
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  next();
-});
 
 // Auth middleware ONLY for API routes (NOT for socket.io)
 app.use(authorizeUser);
