@@ -33,6 +33,10 @@ setupSocket(io);
 // Middlewares
 app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json());
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  next();
+});
 
 // Auth middleware ONLY for API routes (NOT for socket.io)
 app.use(authorizeUser);
