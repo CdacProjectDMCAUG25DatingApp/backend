@@ -15,7 +15,6 @@ const settingsRoutes = require("./routes/settingsroutes");
 const chatRoutes = require("./routes/chat");
 const swipeRouter = require("./routes/swipes");
 
-
 // Initialize express + HTTP server
 const app = express();
 const server = http.createServer(app);
@@ -24,23 +23,13 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*" }
 });
-
-// Initialize socket handlers
 const setupSocket = require("./socket");
 setupSocket(io);
 
-// Middlewares
-app.use(cors());
-app.use('/profilePhotos', express.static('profilePhotos'))
-app.use(express.json());
-
-// Auth middleware ONLY for API routes (NOT for socket.io)
-app.use(authorizeUser);
-
-
-//CORS Problem
+// ---------- CLEAN CORS CONFIG ----------
 const allowedOrigins = [
     "https://flertecdacdmcproject.netlify.app",
+    "http://localhost:5173"
 ];
 
 app.use(cors({
@@ -54,7 +43,16 @@ app.use(cors({
     credentials: true,
 }));
 
-app.options("*", cors());
+// EXPRESS v5 COMPATIBLE PREFLIGHT
+app.options("/(.*)", cors());
+// ---------------------------------------
+
+// Static + JSON
+app.use('/profilePhotos', express.static('profilePhotos'));
+app.use(express.json());
+
+// Auth middleware (exclude signin/signup)
+app.use(authorizeUser);
 
 // Routers
 app.use('/user', userRouter);
