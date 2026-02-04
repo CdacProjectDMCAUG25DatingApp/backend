@@ -26,15 +26,13 @@ const io = new Server(server, {
 const setupSocket = require("./socket");
 setupSocket(io);
 
-// ---------- CLEAN CORS CONFIG ----------
-const allowedOrigins = [
-    "https://flertecdacdmcproject.netlify.app",
-    "http://localhost:5173"
-];
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        const allowed = [
+            "https://flertecdacdmcproject.netlify.app"
+        ];
+        if (!origin || allowed.includes(origin)) {
             callback(null, true);
         } else {
             callback(new Error("CORS blocked"));
@@ -43,9 +41,8 @@ app.use(cors({
     credentials: true,
 }));
 
-// EXPRESS v5 COMPATIBLE PREFLIGHT
-app.options("/(.*)", cors());
-// ---------------------------------------
+// Preflight (Express v5 safe wildcard)
+app.options("/*", cors());
 
 // Static + JSON
 app.use('/profilePhotos', express.static('profilePhotos'));
