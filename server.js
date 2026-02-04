@@ -15,60 +15,29 @@ const settingsRoutes = require("./routes/settingsroutes");
 const chatRoutes = require("./routes/chat");
 const swipeRouter = require("./routes/swipes");
 
+
+// Initialize express + HTTP server
 const app = express();
 const server = http.createServer(app);
 
-// socket.io
+// Setup Socket.io
 const io = new Server(server, {
     cors: { origin: "*" }
 });
-require("./socket")(io);
 
-// ============================================
-// 1. GLOBAL CORS HEADERS (must be FIRST)
-// ============================================
-const allowedOrigins = [
-    "https://flertecdacdmcproject.netlify.app",
-    "http://localhost:5173",
-];
+// Initialize socket handlers
+const setupSocket = require("./socket");
+setupSocket(io);
 
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-
-    if (allowedOrigins.includes(origin)) {
-        res.setHeader("Access-Control-Allow-Origin", origin);
-    }
-
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, token");
-
-    // Preflight OPTIONS must exit before hitting authorizeUser
-    if (req.method === "OPTIONS") {
-        return res.status(200).end();
-    }
-
-    next();
-});
-
-// ============================================
-// 2. Static + JSON parsing
-// ============================================
-app.use('/profilePhotos', express.static('profilePhotos'));
+// Middlewares
+app.use(cors());
+app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json());
 
-// ============================================
-// 3. AUTHORIZATION (your authuser.js unchanged)
-// ============================================
-app.use((req, res, next) => {
-    // Your authorizeUser already bypasses:
-    // /user/signin and /user/signup
-    authorizeUser(req, res, next);
-});
+// Auth middleware ONLY for API routes (NOT for socket.io)
+app.use(authorizeUser);
 
-// ============================================
-// 4. ROUTES
-// ============================================
+// Routers
 app.use('/user', userRouter);
 app.use("/photos", photoRouter);
 app.use('/api', lookUpRouter);
@@ -78,9 +47,6 @@ app.use("/settings", settingsRoutes);
 app.use("/chat", chatRoutes);
 app.use("/swipe", swipeRouter);
 
-// ============================================
-// 5. Start Server
-// ============================================
 server.listen(4000, '0.0.0.0', () => {
-    console.log("✔ Server running on port 4000");
+    console.log("Server running on port 4000");
 });
