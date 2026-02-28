@@ -34,6 +34,8 @@ setupSocket(io);
 app.use('/profilePhotos', express.static('profilePhotos'))
 app.use(express.json());
 
+console.log("Req:",express.request.url,"  ",express.request.body)
+
 // Auth middleware ONLY for API routes (NOT for socket.io)
 app.use(authorizeUser);
 
