@@ -3,9 +3,10 @@ const result = require('./result')
 const config = require('./config')
 
 function authorizeUser(req, res, next) {
-    // For checking the incoming request and the token
+   
     const url = req.url
-    if (url == '/user/signin' || url == '/user/signup') // for these 2 routes no token is required
+
+    if (url == '/user/signin' || url == '/user/signup') 
         next()
     else {
         const token = req.headers.token

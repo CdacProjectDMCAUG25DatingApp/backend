@@ -20,10 +20,6 @@ const swipeRouter = require("./routes/swipes");
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
-app.use((req, res, next) => {
-    console.log("⭐ Incoming request:", req.method, req.url);
-    next();
-});
 
 // Setup Socket.io
 const io = new Server(server, {
@@ -57,7 +53,4 @@ server.listen(4000, '0.0.0.0', () => {
 
 const pool = require("./utils/db");
 
-pool.query("SELECT 1")
-  .then(() => console.log("DB OK"))
-  .catch(err => console.error("DB FAIL:", err));
 

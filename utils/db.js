@@ -1,7 +1,7 @@
 // db.js
 require('dotenv').config();
 
-const mysql = require('mysql2/promise');
+const mysql = require('mysql2');
 
 if (!process.env.DB_HOST || !process.env.DB_SSL_CA_CERT_CONTENT) {
     console.error("❌ Missing DB_HOST or DB_SSL_CA_CERT_CONTENT");

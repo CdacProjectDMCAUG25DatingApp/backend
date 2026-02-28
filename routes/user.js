@@ -60,12 +60,9 @@ LEFT JOIN userpreferences pref
 WHERE u.uid = ?;
 `;
 
-/* ============================================================
-    SIGNUP
-============================================================ */
+
 router.post("/signup", (req, res) => {
     const { name, email, password, mobile } = req.body;
-
     if (!name || !email || !password || !mobile)
         return res.send(result.createResult("All fields required"));
 
@@ -83,9 +80,7 @@ router.post("/signup", (req, res) => {
     });
 });
 
-/* ============================================================
-  SIGNIN → RETURN token + user's full details + photos
-============================================================ */
+
 router.post("/signin", (req, res) => {
     const { email, password } = req.body;
 
@@ -95,6 +90,8 @@ router.post("/signin", (req, res) => {
     const sql = `SELECT * FROM users WHERE email = ?`;
 
     pool.query(sql, [email], (err, users) => {
+        console.log(users)
+
         if (err) return res.send(result.createResult(err));
         if (users.length === 0)
             return res.send(result.createResult("Invalid Email"));
@@ -113,6 +110,7 @@ router.post("/signin", (req, res) => {
 
             // JWT contains uid — secure
             const token = jwt.sign({ uid }, config.SECRET, { expiresIn: "30d" });
+
 
             const publicUser = {
                 token,
@@ -155,7 +153,6 @@ router.post("/signin", (req, res) => {
                     pool.query(profileCheckSQL, [uid], (err3, p1) => {
                         pool.query(prefCheckSQL, [uid], (err4, p2) => {
                             pool.query(photosCountSQL, [uid], (err5, p3) => {
-
                                 const fullDetails = userDetailsRows[0] || {};
                                 const photos = photosRows || [];
 
@@ -191,7 +188,7 @@ router.post("/signin", (req, res) => {
 ============================================================ */
 router.get("/userdetails", (req, res) => {
     const uid = req.headers.uid;
-    
+
     pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
         return res.send(result.createResult(err, data?.[0]));
     });
@@ -200,14 +197,14 @@ router.get("/userdetails", (req, res) => {
 /* ============================================================
  PUT userdetails → UPDATE PROFILE & PREFERENCES TOGETHER
 ============================================================ */
-router.put("/userdetails", (req, res) => {
+router.put("/userdetails", async (req, res) => {
     const uid = req.headers.uid;
     const payload = req.body;
-    
+
     if (!uid) return res.send(result.createResult("UID missing"));
     if (!Object.keys(payload).length)
         return res.send(result.createResult("No fields to update"));
-    
+
     // Maps frontend fields → database column names
     const PROFILE_MAP = {
         bio: "bio",
@@ -223,7 +220,7 @@ router.put("/userdetails", (req, res) => {
         education: "education",
         job_industry_id: "job_industry_id",
     };
-    
+
     const PREF_MAP = {
         preferred_gender_id: "preferred_gender_id",
         looking_for_id: "looking_for_id",
@@ -242,13 +239,13 @@ router.put("/userdetails", (req, res) => {
         personality_type_id: "personality_type_id",
         pet_id: "pet_id",
     };
-    
+
     const profileUpdates = [];
     const profileValues = [];
-    
+
     const prefUpdates = [];
     const prefValues = [];
-    
+
     // Split fields into correct table
     for (const [key, value] of Object.entries(payload)) {
         if (PROFILE_MAP[key]) {
@@ -260,9 +257,9 @@ router.put("/userdetails", (req, res) => {
             prefValues.push(value);
         }
     }
-    
+
     const tasks = [];
-    
+
     if (profileUpdates.length) {
         tasks.push(
             new Promise((resolve) => {
@@ -275,7 +272,7 @@ router.put("/userdetails", (req, res) => {
             })
         );
     }
-    
+
     if (prefUpdates.length) {
         tasks.push(
             new Promise((resolve) => {
@@ -288,13 +285,16 @@ router.put("/userdetails", (req, res) => {
             })
         );
     }
-    
+
     // Return updated userdetails
-    Promise.all(tasks).then(() => {
-        pool.query(FULL_USER_DETAILS_SQL, [uid], (err, data) => {
-            return res.send(result.createResult(err, data?.[0]));
-        });
-    });
+    try {
+        await Promise.all(tasks);
+        const [rows] = await pool.promise().query(FULL_USER_DETAILS_SQL, [uid]);
+        res.send(result.createResult(null, rows?.[0]));
+    } catch (err) {
+        res.send(result.createResult(err));
+    }
+
 });
 
 router.post("/profile", (req, res) => {
@@ -394,6 +394,26 @@ router.post("/preferences", (req, res) => {
 
         return res.send(result.createResult(null, "Preferences set"));
     });
+});
+
+router.get("/userpreferences", async (req, res) => {
+  try {
+    const uid = req.headers.uid;
+    if (!uid) {
+      return res.send(result.createResult("Missing uid"));
+    }
+    const sql = `SELECT * FROM userpreferences WHERE uid = ?`;
+    pool.query(sql, [uid], (err, rows) => {
+      if (err) {
+        return res.send(result.createResult("Database error"));
+      }
+      res.send(result.createResult(null, rows));
+    });
+
+  } catch (err) {
+    console.log(err);
+    res.send(result.createResult("Server error"));
+  }
 });
 
 

@@ -1,3 +1,4 @@
+// photos.js
 const express = require("express");
 const multer = require("multer");
 const sharp = require("sharp");
@@ -8,72 +9,56 @@ const result = require("../utils/result");
 
 const router = express.Router();
 
-/* ----------------------  MULTER TEMP STORAGE  ---------------------- */
-const storage = multer.memoryStorage(); // files stay in memory
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-/* ----------------------  UPLOAD 6 IMAGES + WEBP --------------------- */
+router.post("/upload", upload.array("photos", 6), (req, res) => {
+  const uid = req.headers.uid;
+  if (!uid) return res.send(result.createResult("Missing uid"));
 
-router.post("/upload", upload.array("photos", 6), async (req, res) => {
-  try {
-    const uid = req.headers.uid;
+  const files = req.files;
+  if (!files || files.length !== 6)
+    return res.send(result.createResult("Exactly 6 photos required"));
 
-    if (!uid) return res.send(result.createResult("Missing uid"));
+  const folder = "profilePhotos";
+  if (!fs.existsSync(folder)) fs.mkdirSync(folder);
 
-    const files = req.files;
-    if (!files || files.length !== 6) {
-      return res.send(result.createResult("Exactly 6 photos required"));
-    }
+  let finalPhotos = [];
+  let processed = 0;
 
-    // Directory
-    const folder = "profilePhotos";
-    if (!fs.existsSync(folder)) fs.mkdirSync(folder);
+  files.forEach((file, i) => {
+    const filename = `${uid}-${Date.now()}-${i}.webp`;
+    const filepath = path.join(folder, filename);
 
-    const finalPhotos = [];
+    sharp(file.buffer)
+      .resize(900, 1200)
+      .webp({ quality: 85 })
+      .toFile(filepath, () => {
+        finalPhotos.push(filename);
+        processed++;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+        if (processed === files.length) {
+          const values = [
+            [uid, finalPhotos[0], 1, 1],
+            [uid, finalPhotos[1], 2, 1],
+            [uid, finalPhotos[2], 0, 1],
+            [uid, finalPhotos[3], 0, 1],
+            [uid, finalPhotos[4], 0, 1],
+            [uid, finalPhotos[5], 0, 1],
+          ];
 
-      // Generate filename
-      const filename = `${uid}-${Date.now()}-${i}.webp`;
-      const filepath = path.join(folder, filename);
+          const sql = `
+            INSERT INTO userphotos (uid, photo_url, is_primary, is_approved)
+            VALUES ?
+          `;
 
-      // Convert → WEBP
-      await sharp(file.buffer)
-        .resize(900, 1200, { fit: "cover" })
-        .webp({ quality: 85 })
-        .toFile(filepath);
-
-      // Save relative path
-      finalPhotos.push(`${filename}`);
-    }
-
-    // is_primary mapping
-    const values = [
-      [uid, finalPhotos[0], 1, 1], // DP
-      [uid, finalPhotos[1], 2, 1], // Profile card
-      [uid, finalPhotos[2], 0, 1],
-      [uid, finalPhotos[3], 0, 1],
-      [uid, finalPhotos[4], 0, 1],
-      [uid, finalPhotos[5], 0, 1],
-    ];
-
-    const sql = `
-      INSERT INTO userphotos (uid, photo_url, is_primary, is_approved)
-      VALUES ?
-    `;
-
-    pool.query(sql, [values], (err) => {
-      res.send(result.createResult(err, { uploaded: true }));
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.send(result.createResult("Server error"));
-  }
+          pool.query(sql, [values], err => {
+            return res.send(result.createResult(err, { uploaded: true }));
+          });
+        }
+      });
+  });
 });
-
-/* ----------------------  GET USER PHOTOS ---------------------------- */
 
 router.get("/userphotos", (req, res) => {
   const uid = req.headers.uid;
@@ -81,19 +66,16 @@ router.get("/userphotos", (req, res) => {
   const sql = `
     SELECT photo_id, photo_url, prompt, is_primary
     FROM userphotos
-    WHERE uid = ?
-    AND is_approved = 1
+    WHERE uid = ? AND is_approved = 1
     ORDER BY 
-      CASE 
-        WHEN is_primary = 1 THEN 0 
-        WHEN is_primary = 2 THEN 1
-        ELSE 2
-      END,
-      uploaded_at ASC;
+      CASE WHEN is_primary = 1 THEN 0
+           WHEN is_primary = 2 THEN 1
+           ELSE 2 END,
+      uploaded_at ASC
   `;
 
-  pool.query(sql, [uid], (err, data) => {
-    res.send(result.createResult(err, data));
+  pool.query(sql, [uid], (err, rows) => {
+    res.send(result.createResult(err, rows));
   });
 });
 
@@ -148,27 +130,19 @@ router.put("/replace", upload.single("photo"), async (req, res) => {
   }
 });
 
-
-/* ============================================================
-    PATCH: Update Photo Prompt
-============================================================ */
 router.patch("/prompt", (req, res) => {
-    const uid = req.headers.uid;
-    const { photo_id, prompt } = req.body;
+  const uid = req.headers.uid;
+  const { photo_id, prompt } = req.body;
 
-    if (!uid || !photo_id)
-        return res.send(result.createResult("Missing uid or photo_id"));
+  const sql = `
+    UPDATE userphotos
+    SET prompt = ?
+    WHERE photo_id = ? AND uid = ? AND is_deleted = 0
+  `;
 
-    const sql = `
-        UPDATE userphotos
-        SET prompt = ?
-        WHERE photo_id = ? AND uid = ? AND is_deleted = 0
-    `;
-
-    pool.query(sql, [prompt, photo_id, uid], (err, data) => {
-        return res.send(result.createResult(err, data));
-    });
+  pool.query(sql, [prompt, photo_id, uid], (err, data) => {
+    res.send(result.createResult(err, data));
+  });
 });
-
 
 module.exports = router;
