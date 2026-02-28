@@ -16,6 +16,23 @@ router.post("/upload", upload.array("photos", 6), (req, res) => {
   const uid = req.headers.uid;
   if (!uid) return res.send(result.createResult("Missing uid"));
 
+  const sql = `
+    SELECT photo_id, photo_url, prompt, is_primary
+    FROM userphotos
+    WHERE uid = ? AND is_approved = 1
+    ORDER BY 
+      CASE WHEN is_primary = 1 THEN 0
+           WHEN is_primary = 2 THEN 1
+           ELSE 2 END,
+      uploaded_at ASC
+  `;
+  
+  pool.query(sql, [uid], (err, rows) => {
+    if(rows[0].total === 6){
+      res.send(result.createResult("photos already uploaded"));
+    }
+  });
+
   const files = req.files;
   if (!files || files.length !== 6)
     return res.send(result.createResult("Exactly 6 photos required"));
