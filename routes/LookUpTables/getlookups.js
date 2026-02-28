@@ -37,7 +37,7 @@ router.get("/education", (req, res) => {
 });
 router.get("/job-Industry", (req, res) => {
     pool.query(
-        "SELECT id, name FROM JobIndustry WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM jobindustry WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
@@ -124,7 +124,7 @@ router.get("/dietary", (req, res) => {
 
 router.get("/sleepingHabit", (req, res) => {
     pool.query(
-        "SELECT id, name FROM sleepingHabit WHERE active = 1;",(err, data) => {
+        "SELECT id, name FROM sleepinghabit WHERE active = 1;",(err, data) => {
             res.send(result.createResult(err,data));
         }
     );
